@@ -15,7 +15,7 @@ def vectorization_dataset(ruta):
 
     textos = df_vectorizacion["open_response"].astype(str).tolist()
 
-    print("Cantidad de textos:", len(textos))
+    print("Cuantity of texts:", len(textos))
 
     X = model.encode(
         textos,
@@ -24,7 +24,7 @@ def vectorization_dataset(ruta):
         show_progress_bar=True
     )
 
-    print("Dimensión matriz embeddings:", X.shape)
+    print("Dimensions matrix embeddings:", X.shape)
 
     np.save("embeddings.npy", X)
 
@@ -57,6 +57,20 @@ def show_similarity(indice, X, textos, cantidad=5):
 
     print(f"{cantidad} textos más similares:")
 
-    for i in indices[:cantidad]:
+    for i in indices[1:cantidad+1]:
         print(f"\nSimilitud: {similitudes[i]:.4f}")
         print(textos.iloc[i])
+
+show_similarity(
+    0,
+    X,
+    df_vectorizacion["open_response"],
+    cantidad=5
+)
+
+show_similarity(
+    25,
+    X,
+    df_vectorizacion["open_response"],
+    cantidad=10
+)
