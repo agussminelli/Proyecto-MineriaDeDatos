@@ -58,7 +58,6 @@ output_dir = r"C:\Users\Agustina\semestre7\intercambio\Mineria de datos\DatosPro
 
 X, df_vectorized = vectorize_dataset(file_path, output_dir)
 
-X, df_vectorized = vectorize_dataset(file_path)
 
 
 def show_similarity(index, X, texts, num_results=5):
@@ -81,16 +80,18 @@ def show_similarity(index, X, texts, num_results=5):
         print(texts.iloc[i])
 
 
-show_similarity(
-    0,
-    X,
-    df_vectorized["open_response"],
-    num_results=5
-)
 
-show_similarity(
-    25,
-    X,
-    df_vectorized["open_response"],
-    num_results=10
-)
+# ## Show similarity for a specific text
+# show_similarity(
+#     0,
+#     X,
+#     df_vectorized["open_response"],
+#     num_results=5
+# )
+
+# show_similarity(
+#     25,
+#     X,
+#     df_vectorized["open_response"],
+#     num_results=10
+# )
