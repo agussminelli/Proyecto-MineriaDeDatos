@@ -1,76 +1,96 @@
+
 from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 import numpy as np
 
+
 model = SentenceTransformer(
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    local_files_only=True
 )
 
 
-def vectorization_dataset(ruta):
+from pathlib import Path
 
-    df = pd.read_csv(ruta)
+def vectorize_dataset(file_path, output_dir):
 
-    df_vectorizacion = df.dropna(subset=["open_response"]).copy()
+    df = pd.read_csv(file_path)
 
-    textos = df_vectorizacion["open_response"].astype(str).tolist()
+    df_vectorized = df.dropna(subset=["open_response"]).copy()
 
-    print("Cuantity of texts:", len(textos))
+    texts = df_vectorized["open_response"].astype(str).tolist()
+
+    print("Number of texts:", len(texts))
 
     X = model.encode(
-        textos,
+        texts,
         convert_to_numpy=True,
         normalize_embeddings=True,
         show_progress_bar=True
     )
 
-    print("Dimensions matrix embeddings:", X.shape)
+    print("Embedding matrix shape:", X.shape)
 
-    np.save("embeddings.npy", X)
+    # Create output directory if it does not exist
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    df_vectorizacion[
+    # Save embeddings
+    np.save(output_path / "embeddings.npy", X)
+
+    # Save metadata
+    df_vectorized[
         ["newid", "gs_text34"]
     ].to_csv(
-        "embedding_metadata.csv",
+        output_path / "embedding_metadata.csv",
         index=False
     )
 
-    return X, df_vectorizacion
+    return X, df_vectorized
 
 
-ruta = r"C:\Users\Agustina\semestre7\intercambio\Mineria de datos\DatosProyecto\cleaned_PHMRC_VAI_redacted_free_text.train.csv" 
-X, df_vectorizacion = vectorization_dataset(ruta)
+## This is my file path, you can change it to your own file path to where the dataset is located
+## and to where you want to save the embeddings and metadata
 
-from sklearn.metrics.pairwise import cosine_similarity
+file_path = r"C:\Users\Agustina\semestre7\intercambio\Mineria de datos\DatosProyecto\cleaned_PHMRC_VAI_redacted_free_text.train.csv"
+output_dir = r"C:\Users\Agustina\semestre7\intercambio\Mineria de datos\DatosProyecto\LocalData"
 
-def show_similarity(indice, X, textos, cantidad=5):
-    similitudes = cosine_similarity(
-        X[indice].reshape(1, -1),
+X, df_vectorized = vectorize_dataset(file_path, output_dir)
+
+X, df_vectorized = vectorize_dataset(file_path)
+
+
+def show_similarity(index, X, texts, num_results=5):
+
+    similarities = cosine_similarity(
+        X[index].reshape(1, -1),
         X
     )[0]
 
-    indices = np.argsort(similitudes)[::-1]
+    sorted_indices = np.argsort(similarities)[::-1]
 
-    print("Texto de referencia:")
-    print(textos.iloc[indice])
+    print("Reference text:")
+    print(texts.iloc[index])
     print()
 
-    print(f"{cantidad} textos más similares:")
+    print(f"{num_results} most similar texts:")
 
-    for i in indices[1:cantidad+1]:
-        print(f"\nSimilitud: {similitudes[i]:.4f}")
-        print(textos.iloc[i])
+    for i in sorted_indices[1:num_results + 1]:
+        print(f"\nSimilarity: {similarities[i]:.4f}")
+        print(texts.iloc[i])
+
 
 show_similarity(
     0,
     X,
-    df_vectorizacion["open_response"],
-    cantidad=5
+    df_vectorized["open_response"],
+    num_results=5
 )
 
 show_similarity(
     25,
     X,
-    df_vectorizacion["open_response"],
-    cantidad=10
+    df_vectorized["open_response"],
+    num_results=10
 )
