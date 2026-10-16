@@ -23,8 +23,11 @@ def convert_numeric_columns(headers, rows):
             value = row[index].strip()
             row[index] = convert(value) if value else None
 
-def load_dataset():
-    dataset_dir = Path(__file__).resolve().parent.parent / "verbal_autopsy" 
+def load_dataset(dataset_dir=None):
+    if dataset_dir is None:
+        dataset_dir = Path(__file__).resolve().parent.parent / "verbal_autopsy"
+    else:
+        dataset_dir = Path(dataset_dir)
     testdata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.test_blind.csv"
     traindata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.train.csv"
 
@@ -33,7 +36,7 @@ def load_dataset():
     convert_numeric_columns(train_headers, train)
     convert_numeric_columns(test_headers, test)
 
-    return train, test, train_headers, test_headers
+    return train, test, train_headers, test_headers, dataset_dir
 
 if __name__ == "__main__":
     train, test = load_dataset()
