@@ -1,3 +1,4 @@
 *.csv
 LocalData/
 *.npy
+*.pyc
