@@ -101,6 +101,10 @@ class DBSCAN:
         -------
         self
             Cluster labels use -1 for noise and positive integers for clusters.
+
+        Example Usage:      #model.fit(X)                  # Calculate distances on demand
+                            #model.fit(X, precompute=True) # Cache all distances
+                            #model.fit()                   # Reuse stored data and any cached distances
         """
         # Validate again because parameters may change between fits.
         if not np.isfinite(self.eps) or self.eps <= 0:
@@ -329,6 +333,7 @@ class DBSCAN:
 
 if __name__ == "__main__":
     from generate_testdata import generate_smiley_data, generate_easy_text
+
 
     # X_smiley = generate_smiley_data()
 
