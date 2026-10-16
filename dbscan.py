@@ -328,8 +328,7 @@ class DBSCAN:
     
 
 if __name__ == "__main__":
-    from testdata.generate_smiley import generate_smiley_data
-    from testdata.easy_text import generate_easy_text
+    from generate_testdata import generate_smiley_data, generate_easy_text
 
     # X_smiley = generate_smiley_data()
 
