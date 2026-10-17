@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class DBSCAN:
-    def __init__(self, eps=0.5, min_samples=5):
+    def __init__(self, eps=0.5, min_samples=5,
+                 metric="euclidean", p=2): #TODO: What does p=2 mean...
         if eps <= 0:
             raise ValueError("eps must be positive")
         if not isinstance(min_samples, int) or min_samples < 1:
@@ -10,7 +11,11 @@ class DBSCAN:
 
         self.eps = eps
         self.min_samples = min_samples
+        self.metric = metric
+        self.p = p
+
         self.distance_matrix_ = None
+        self._distance_config_ = None #TODO: What for?
 
     def _region_query(self, i):
         if self.distance_matrix_ is not None:
@@ -36,7 +41,57 @@ class DBSCAN:
             self.distance_matrix_ = D
 
     def _distances_from_point(self, i):
-        return np.linalg.norm(self.X_ - self.X_[i], axis=1)
+        point = self.X_[i]
+
+        if self.metric == "cosine":
+            norms = np.linalg.norm(self.X_, axis=1)
+            similarities= (self.X_@point)/(norms*norms[i])
+
+            distances = 1.0 - np.clip(similarities, -1.0, 1.0)
+        else:
+            differences = np.abs(self.X_ - point)
+
+            if self.metric =="euclidean":
+                distances = np.sqrt(np.sum(differences**2, axis=1))
+            elif self.metric == "manhatten":
+                distances = np.sum(differences, axis=1)
+            elif self.metric == "minkowski":
+                distances = np.sum(differences**self.p, axis=1)**(1.0/self.p)
+            else:
+                raise ValueError(f"Unsupported metric: {self.metric}")
+        distances[i]=0.0
+        return distances
+
+    def _prepare_distances(self):
+        """Validate distance settings and clear an incompatible cache."""
+        allowed = {"euclidean", "manhattan", "cosine", "minkowski"}
+
+        if self.metric not in allowed:
+            raise ValueError(f"metric must be one of {sorted(allowed)}")
+
+        if self.metric == "minkowski":
+            if not np.isfinite(self.p) or self.p < 1:
+                raise ValueError("Minkowski p must be finite and >= 1")
+
+        if not hasattr(self, "X_"):
+            raise ValueError("Provide data with fit(X) first")
+
+        if self.metric == "cosine":
+            if np.any(np.linalg.norm(self.X_, axis=1) == 0):
+                raise ValueError(
+                    "Cosine distance is undefined for zero vectors. "
+                    "Remove empty-vector rows while preserving their "
+                    "matching IDs, or choose another metric."
+                )
+
+        config = (
+            self.metric,
+            self.p if self.metric == "minkowski" else None,
+        )
+
+        if config != self._distance_config_:
+            self.distance_matrix_ = None
+            self._distance_config_ = config
 
     def _initialise(self):
         self.labels_ = np.zeros(len(self.X_), dtype=int)
@@ -106,7 +161,7 @@ class DBSCAN:
                             #model.fit(X, precompute=True) # Cache all distances
                             #model.fit()                   # Reuse stored data and any cached distances
         """
-        # Validate again because parameters may change between fits.
+
         if not np.isfinite(self.eps) or self.eps <= 0:
             raise ValueError("eps must be finite and positive")
 
@@ -131,10 +186,10 @@ class DBSCAN:
         elif not hasattr(self, "X_"):
             raise ValueError("Provide X on the first call to fit")
 
+        self._prepare_distances()
         if precompute:
             self._ensure_distance_matrix()
 
-        # This method already resets labels through _initialise().
         self._find_clusters()
         return self
 
@@ -143,100 +198,21 @@ class DBSCAN:
         self.fit(X, precompute=precompute)
         return self.labels_.copy()
 
-    # Evaluation Functions
-
-    def plot_k_distance(self, min_samples=None): #TODO: Delete
-        """Plot neighbourhood radii, counting the point itself.
-
-        Requires stored data. Creates the distance cache if necessary.
-        Returns the sorted radius values.
-        """
-        if min_samples is None:
-            min_samples = self.min_samples
-
-        self._ensure_distance_matrix()
-
-        if (
-            not isinstance(min_samples, (int, np.integer))
-            or not 2 <= min_samples <= len(self.X_)
-        ):
-            raise ValueError("min_samples must be an integer between 2 and n_points")
-
-        k = min_samples - 1
-        kth_distances = np.partition(
-            self.distance_matrix_, k, axis=1
-        )[:, k]
-        sorted_distances = np.sort(kth_distances)
-
-        fig, ax = plt.subplots()
-        ax.plot(sorted_distances)
-        ax.set_xlabel("Points ordered by neighbourhood radius")
-        ax.set_ylabel(f"Neighbourhood radius (min_samples={min_samples})")
-        ax.set_title("K-distance graph")
-        ax.grid(alpha=0.3)
-        plt.show()
-
-        return sorted_distances
-
-    def estimate_eps(self, min_samples=None): #TODO: look over algorithm
-        """Estimate eps from the bend in the sorted k-distance curve."""
-        if min_samples is None:
-            min_samples = self.min_samples
-
-        self._ensure_distance_matrix()
-        n = len(self.X_)
-
-        if (
-            not isinstance(min_samples, (int, np.integer))
-            or not 2 <= min_samples <= n
-        ):
-            raise ValueError("min_samples must be between 2 and n_points")
-
-        k = min_samples - 1
-        distances = np.sort(
-            np.partition(self.distance_matrix_, k, axis=1)[:, k]
-        )
-
-        span = distances[-1] - distances[0]
-        if span == 0:
-            raise ValueError("The curve is constant; no knee can be estimated")
-
-        x = np.linspace(0, 1, n)
-        y = (distances - distances[0]) / span
-
-        # For an increasing curve with a flat region and steep tail:
-        scores = x - y
-        knee_index = int(np.argmax(scores))
-
-        if knee_index in (0, n - 1) or scores[knee_index] <= 0:
-            raise ValueError("No interior knee found by this heuristic")
-
-        eps_candidate = float(distances[knee_index])
-
-        fig, ax = plt.subplots()
-        ax.plot(distances)
-        ax.scatter(
-            knee_index, eps_candidate,
-            color="red", label=f"Candidate eps = {eps_candidate:.4f}",
-        )
-        ax.axhline(eps_candidate, color="red", linestyle="--", alpha=0.5)
-        ax.set_xlabel("Points ordered by neighbourhood radius")
-        ax.set_ylabel(f"Neighbourhood radius (min_samples={min_samples})")
-        ax.legend()
-        ax.grid(alpha=0.3)
-        plt.show()
-
-        return eps_candidate
-
+    # Visualisation Evaluation Function
     def examine_parameters(self, eps_values, min_samples_values):
-        """Fit DBSCAN for each parameter pair and plot clusters and noise.
-
+        """Fit DBSCAN for each parameter pair and plot k-distance, clusters and noise.
+        Requires data already stored through fit(data=X).
         Returns:
             cluster_counts: shape (n_min_samples, n_eps).
             noise_fractions: same shape, values between 0 and 1.
+            eps_candidates: for every given min_samples_value
         """
         eps_values = list(eps_values)
         min_samples_values = list(min_samples_values)
+
+        self._ensure_distance_matrix()
+        D = self.distance_matrix_
+        n = len(self.X_)
 
         if not eps_values or not min_samples_values:
             raise ValueError("Parameter ranges must not be empty")
@@ -252,15 +228,60 @@ class DBSCAN:
             ):
                 raise ValueError("min_samples values must be positive integers")
 
-        self._ensure_distance_matrix()
-
         shape = (len(min_samples_values), len(eps_values))
         cluster_counts = np.zeros(shape, dtype=int)
         noise_fractions = np.zeros(shape, dtype=float)
+        eps_candidates = {}
 
-        # Use a separate model so experiments preserve your current fit.
+        fig, axes = plt.subplots(
+            1, 3,
+            figsize=(19, 6),
+            constrained_layout=True,
+        )
+        ax_distance, ax_clusters, ax_noise = axes
+
+        # Overlay k-distance curves and mark candidate knees.
+        for min_samples in min_samples_values:
+            k = min_samples - 1
+            radii = np.sort(np.partition(D, k, axis=1)[:, k])
+
+            line, = ax_distance.plot(
+                radii,
+                label=f"min_samples={min_samples}",
+            )
+
+            candidate = None
+            span = radii[-1] - radii[0]
+
+            if span > 0:
+                x = np.linspace(0, 1, n)
+                y = (radii - radii[0]) / span
+                scores = x - y
+                knee = int(np.argmax(scores))
+
+                if 0 < knee < n - 1 and scores[knee] > 0:
+                    candidate = float(radii[knee])
+
+                    ax_distance.scatter(
+                        knee,
+                        candidate,
+                        color=line.get_color(),
+                        marker="x",
+                        s=60,
+                    )
+
+            eps_candidates[min_samples] = candidate
+
+        ax_distance.set_title("K-distance curves; × = candidate knee")
+        ax_distance.set_xlabel("Points ordered separately for each curve")
+        ax_distance.set_ylabel(f"Distance ({self.metric})")
+        ax_distance.grid(alpha=0.3)
+        ax_distance.legend(fontsize=8)
+
+        # separate model so experiments preserve current fit.
         trial = DBSCAN()
         trial.X_ = self.X_
+        trial._prepare_distances()
         trial.distance_matrix_ = self.distance_matrix_
 
         for row, min_samples in enumerate(min_samples_values):
@@ -279,13 +300,14 @@ class DBSCAN:
                 ).size
                 noise_fractions[row, col] = np.mean(labels == -1)
 
-        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+        # 3. Draw both heatmaps.
+        panels = [
+            (ax_clusters, cluster_counts, "Number of clusters", "viridis", False),
+            (ax_noise, noise_fractions, "Noise fraction", "magma", True),
+        ]
 
-        for ax, values, title, cmap in [
-            (axes[0], cluster_counts, "Number of clusters", "viridis"),
-            (axes[1], noise_fractions, "Noise fraction", "magma"),
-        ]:
-            options = {"vmin": 0, "vmax": 1} if title == "Noise fraction" else {}
+        for ax, values, title, cmap, is_noise in panels:
+            options = {"vmin": 0, "vmax": 1} if is_noise else {}
 
             image = ax.imshow(
                 values,
@@ -297,7 +319,7 @@ class DBSCAN:
 
             ax.set_xticks(
                 range(len(eps_values)),
-                labels=[f"{eps:.3f}" for eps in eps_values],
+                labels=[f"{eps:.3g}" for eps in eps_values],
                 rotation=45,
             )
             ax.set_yticks(
@@ -311,70 +333,50 @@ class DBSCAN:
 
             for row in range(values.shape[0]):
                 for col in range(values.shape[1]):
-                    text = (
-                        str(int(values[row, col]))
-                        if title == "Number of clusters"
-                        else f"{values[row, col]:.0%}"
+                    value = values[row, col]
+                    label = f"{value:.0%}" if is_noise else str(int(value))
+
+                    # Choose contrasting text for the cell colour.
+                    rgba = image.cmap(image.norm(value))
+                    brightness = (
+                        0.299 * rgba[0]
+                        + 0.587 * rgba[1]
+                        + 0.114 * rgba[2]
                     )
+
                     ax.text(
-                        col, row, text,
-                        ha="center", va="center",
-                        color="white",
+                        col, row, label,
+                        ha="center",
+                        va="center",
+                        color="black" if brightness > 0.5 else "white",
                         fontsize=8,
                     )
-
-        fig.tight_layout()
+        print("Candidate eps values for min_samples:", eps_candidates,min_samples_values)
         plt.show()
 
-        return cluster_counts, noise_fractions
+        return cluster_counts, noise_fractions, eps_candidates
 
 
     
 
 if __name__ == "__main__":
     from generate_testdata import generate_smiley_data, generate_easy_text
-
-
-    # X_smiley = generate_smiley_data()
-
-    # model = DBSCAN(eps=0.1, min_samples=5)
-
-    # # First fit: on-demand distances.
-    # labels = model.fit_predict(X_smiley)
-    # print(labels)
-
-    # # Builds the distance matrix for reuse.
-    # model.plot_k_distance(min_samples=5)
-    # eps_candidate = model.estimate_eps(min_samples=5)
-
-    # # Call on the object, not on the DBSCAN class.
-    # cluster_counts, noise_fractions = model.examine_parameters(
-    #     eps_values=np.linspace(0.04, 0.20, 9),
-    #     min_samples_values=[3, 5, 8, 12, 20],
-    # )
-
-    # # After inspecting the plots, choose parameters and refit.
-    # model.eps = 0.1
-    # model.min_samples = 5
-    # labels = model.fit_predict()
-
     X_text, texts=generate_easy_text()
 
+    # EXAMPLE USAGE
+    model = DBSCAN(eps=0.5,min_samples=3,metric="cosine")
 
-    model = DBSCAN(min_samples=3)
-
-    # Store data and build the reusable distance matrix.
+    # Store data and build the reusable distance matrix,
+    # if you want to examin params.
     model.fit(X_text, precompute=True)
-
-    eps_candidate = model.estimate_eps(min_samples=3)
-    print("Candidate eps:", eps_candidate)
 
     model.examine_parameters(
         eps_values=[0.3, 0.5, 0.7, 0.9, 1.1],
         min_samples_values=[2, 3, 4],
     )
 
-    model.eps = 0.7  # Example setting to investigate
+    # Example setting to investigate
+    model.eps = 0.3 
     model.min_samples = 3
     labels = model.fit_predict()
 
