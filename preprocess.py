@@ -1,4 +1,3 @@
-#from sklearn.feature_extraction.text import TfidfVectorizer -> dont needed
 import pandas as pd
 import re
 import string
@@ -11,7 +10,7 @@ import ssl
 from loading_dataset import load_dataset
 
 
-# Solve  SSL-certificate problems (usual for Mac hehe)
+# Solve  SSL-certificate problems (usual for Mac )
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -20,13 +19,12 @@ else:
     ssl._create_default_https_context = _create_unverified_https_context
 
 # Download required packages
-paket_att_ladda_ner = ['punkt', 'punkt_tab', 'stopwords', 'wordnet', 'omw-1.4']
+packages_to_download = ['punkt', 'punkt_tab', 'stopwords', 'wordnet', 'omw-1.4']
 
-for paket in paket_att_ladda_ner:
-    print(f"Laddar ner {paket}...")
+for paket in packages_to_download:
     nltk.download(paket)
 
-print("Nedladdning klar! Prova att köra din preprocess-funktion igen.")
+print("All required packages downloaded")
 
 
 def preprocess_dataset(df, text_cols=None, cat_cols=None, num_cols=None):
@@ -72,27 +70,12 @@ def preprocess_dataset(df, text_cols=None, cat_cols=None, num_cols=None):
     
     # Ensure arguments are lists if None is passed
     text_cols = text_cols or []
-    cat_cols = cat_cols or []
-    num_cols = num_cols or []
     
     # --- PROCESS TEXT COLUMNS ---
     for col in text_cols:
         if col in df_clean.columns:
             df_clean[f"{col}_clean"] = df_clean[col].apply(clean_single_text)
 
-    # What do we need that for?        
-    # --- PROCESS NUMERICAL COLUMNS ---
-    for col in num_cols:
-        if col in df_clean.columns:
-            # Impute missing numerical values with the column median
-            median_val = df_clean[col].median()
-            df_clean[col] = df_clean[col].fillna(median_val)
-            
-    # --- PROCESS CATEGORICAL COLUMNS ---
-    for col in cat_cols:
-        if col in df_clean.columns:
-            # Convert to pandas categorical data type for memory efficiency (?)
-            df_clean[col] = df_clean[col].astype('category')
             
     return df_clean
 
@@ -105,7 +88,7 @@ if __name__ == "__main__":
     ##HOW TO USE THE FUNCTION
     processed_df = preprocess_dataset(
         df=train_df, #replace with our data
-        text_cols=['open_response'] # cat_cols and num_cols are left out, so they default to None and are ignored
+        text_cols=['open_response'] 
     )
     # voluntary display check
     print(processed_df[['open_response', 'open_response_clean']].head())
