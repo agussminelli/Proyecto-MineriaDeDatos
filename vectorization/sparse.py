@@ -17,13 +17,13 @@ def apply_ngrams_and_vectorization(cleaned_text_series, n_min=1, n_max=2, min_do
     
     # Initialize the vectorizer to handle both n-grams and sparse vectorization
     vectorizer = TfidfVectorizer(
-        ngram_range=(n_min, n_max),  # 2. Implement n-grams
-        stop_words=None,             # Trust the prior preprocessing step
-        min_df=min_docs,             # Ignore very rare n-grams (reduces noise)
-        max_features=max_feat        # Limit the vocabulary size
+        ngram_range=(n_min, n_max),  
+        stop_words=None,             
+        min_df=min_docs,             
+        max_features=max_feat        
     )
     
-    # 3. Implement sparse vectorization (Learn vocabulary and transform to TF-IDF)
+    # Implement sparse vectorization (Learn vocabulary and transform to TF-IDF)
     sparse_tfidf_matrix = vectorizer.fit_transform(cleaned_text_series)
     
     # Retrieve the names of the generated n-grams
