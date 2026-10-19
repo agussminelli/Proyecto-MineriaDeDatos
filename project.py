@@ -54,9 +54,6 @@ def main():
 
     model1.fit(X_train_dense, precompute=True)
 
-    eps_candidate = model1.estimate_eps(min_samples=3)
-    print("Candidate eps:", eps_candidate)
-
     counts, noise, candidates = model1.examine_parameters(
         eps_values=[0.3, 0.5, 0.7, 0.9, 1.1],
         min_samples_values=[2,3,4,5],
