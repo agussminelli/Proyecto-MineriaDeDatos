@@ -4,10 +4,51 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from hdbscan.validity import validity_index
+import hdbscan.validity as dbcv_module
+from scipy.special import logsumexp
 from sklearn.metrics import silhouette_score, adjusted_rand_score
 
+def stable_all_points_core_distance(distance_matrix, d=2.0):
+    """Compute DBCV core distances without inverse-power overflow.
 
+    Preserves hdbscan's convention of ignoring zero distances.
+    """
+    D = np.asarray(distance_matrix, dtype=np.float64)
+
+    if D.ndim != 2 or D.shape[0] != D.shape[1]:
+        raise ValueError("Distances must form a square matrix")
+    if not np.isfinite(D).all() or np.any(D < 0):
+        raise ValueError("Distances must be finite and nonnegative")
+    if not np.isfinite(d) or d <= 0:
+        raise ValueError("d must be finite and positive")
+
+    n = len(D)
+    if n < 2:
+        return np.zeros(n, dtype=float)
+
+    positive = D > 0
+
+    # log(distance ** -d) = -d * log(distance)
+    log_terms = np.full(D.shape, -np.inf)
+    log_terms[positive] = -d * np.log(D[positive])
+
+    log_sums = logsumexp(log_terms, axis=1)
+
+    result = np.zeros(n, dtype=float)
+    has_positive_distance = positive.any(axis=1)
+
+    result[has_positive_distance] = np.exp(
+        (
+            np.log(n - 1)
+            - log_sums[has_positive_distance]
+        ) / d
+    )
+
+    return result
+
+dbcv_module.all_points_core_distance = (
+    stable_all_points_core_distance
+)
 
 def prepare_dbcv_labels(labels):
     labels = np.asarray(labels, dtype=int)
@@ -116,7 +157,7 @@ def evaluate_parameters(model, eps_values, min_samples_values, y_true=None):
                 if n_clusters >= 2 and np.all(cluster_sizes >= 2):
                     evaluation_labels = prepare_dbcv_labels(labels)
 
-                    dbcv = validity_index(
+                    dbcv = dbcv_module.validity_index(
                         D,
                         evaluation_labels,
                         metric="precomputed",
@@ -220,7 +261,7 @@ if __name__ == "__main__":
         texts=prep_train_df["open_response_clean"].fillna("").tolist(),
         file_path=output_dir / "train_embeddings.npy", 
         model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        recalculate=True,
+        recalculate=False,
     )
 
     X_train_dense_pca = apply_pca(X_train_dense, variance_threshold=0.95)
