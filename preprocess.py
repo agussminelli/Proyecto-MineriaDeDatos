@@ -18,21 +18,21 @@ except AttributeError:
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 
-# Download required packages
-packages_to_download = ['punkt', 'punkt_tab', 'stopwords', 'wordnet', 'omw-1.4']
 
-for paket in packages_to_download:
-    nltk.download(paket)
-
-print("All required packages downloaded")
-
-
-def preprocess_dataset(df, text_cols=None, cat_cols=None, num_cols=None):
+def preprocess_dataset(df, text_cols=None, cat_cols=None, num_cols=None, download=True,):
     """
-    Preprocesses a pandas DataFrame by cleaning text columns, 
-    imputing missing numerical values, and casting categorical columns.
+    Preprocesses a pandas DataFrame by cleaning text columns.
+    Please download necesary packages the first time using the function. Skippable after.
     """
-    
+    # Download required packages
+    if download:
+        packages_to_download = ['punkt', 'punkt_tab', 'stopwords', 'wordnet', 'omw-1.4']
+
+        for paket in packages_to_download:
+            nltk.download(paket)
+
+        print("All required packages downloaded")
+
     def clean_single_text(text):
 
         if not isinstance(text, str):

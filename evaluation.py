@@ -34,7 +34,8 @@ if __name__ == "__main__":
 
     prep_train_df = preprocess_dataset(
         df=train_df,
-        text_cols=['open_response'] 
+        text_cols=['open_response'],
+        download=False 
     )
 
     X_train_dense = load_or_embed_texts(
