@@ -3,6 +3,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from sklearn.decomposition import PCA
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
@@ -106,6 +107,34 @@ def show_similarity(index, X, texts, num_results=5):
         print(texts[i])
 
 
+def apply_pca(X, variance_threshold=0.90):
+    """Reduce embedding dimensions using PCA while preserving a target variance."""
+
+    # Fit PCA to the original embeddings
+    pca = PCA()
+    X_pca_full = pca.fit_transform(X)
+
+    # Calculate cumulative explained variance
+    cumulative_variance = np.cumsum(
+        pca.explained_variance_ratio_
+    )
+
+    # Find the minimum number of components
+    n_components = (
+        np.argmax(cumulative_variance >= variance_threshold) + 1
+    )
+
+    # Select the first n principal components
+    X_pca = X_pca_full[:, :n_components]
+
+    print("Original dimensions:", X.shape[1])
+    print("Selected PCA components:", n_components)
+    print("Explained variance:", cumulative_variance[n_components - 1])
+    print("PCA matrix shape:", X_pca.shape)
+
+    return X_pca
+
+
 
 if __name__ == "__main__":
     import sys
@@ -128,8 +157,18 @@ if __name__ == "__main__":
     ]:
         text_index = headers.index("open_response")
         texts = [row[text_index] for row in rows]
+                    
+    # Generate embeddings
+    X = embed_texts(texts, embedding_model)
 
-        X = embed_texts(texts, embedding_model)
-        save_embeddings(X, headers, rows, output_dir, prefix)
+    # Apply PCA
+    X_pca = apply_pca(X, variance_threshold=0.90)
 
-        show_similarity(0, X, texts, num_results=5)
+    # Save original embeddings
+    save_embeddings(X, headers, rows, output_dir, prefix)
+
+    # Save PCA embeddings
+    save_embeddings(X_pca, headers, rows, output_dir, prefix + "_pca")
+
+    # Check semantic similarity using original embeddings
+    show_similarity(0, X, texts, num_results=5)
