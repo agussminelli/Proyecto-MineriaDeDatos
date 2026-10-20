@@ -6,6 +6,45 @@ from pathlib import Path
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+def load_or_embed_texts(
+    texts,
+    file_path,
+    model_name,
+    recalculate=False,
+    local_files_only=True,
+):
+    """Load cached embeddings, or calculate and save new ones.
+
+    Set recalculate=True if texts, their order, preprocessing,
+    or the embedding model have changed.
+    """
+    file_path = Path(file_path)
+    texts = list(texts)
+
+    if file_path.exists() and not recalculate:
+        X = np.load(file_path, allow_pickle=False)
+
+        if X.ndim != 2 or X.shape[0] != len(texts):
+            raise ValueError(
+                "Cached embeddings do not match the text count. "
+                "Run with recalculate=True."
+            )
+
+        print(f"Loaded embeddings: {file_path}, shape={X.shape}")
+        return X
+
+    embedding_model = SentenceTransformer(
+        model_name,
+        local_files_only=local_files_only,
+    )
+
+    X = embed_texts(texts, embedding_model)
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(file_path, X)
+
+    print(f"Saved embeddings: {file_path}")
+    return X
 
 def embed_texts(texts, model, batch_size=32):
     """Return normalised vectors in the same order as the input texts."""

@@ -24,11 +24,12 @@ if __name__ == "__main__":
     
     from loading_dataset import load_dataset
     from preprocess import preprocess_dataset
-    from vectorization.dense import embed_texts
+    from vectorization.dense import load_or_embed_texts
     from dbscan import DBSCAN
 
 
-    train,_, train_headers,_,_= load_dataset()
+    train,_, train_headers,_, data_dir= load_dataset()
+    output_dir = data_dir/"output"
     train_df=pd.DataFrame(train, columns=train_headers)
 
     prep_train_df = preprocess_dataset(
@@ -36,14 +37,11 @@ if __name__ == "__main__":
         text_cols=['open_response'] 
     )
 
-    embedding_model = SentenceTransformer(
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        local_files_only=True,
-    )
-    
-    X_train_dense = embed_texts(
-        prep_train_df["open_response"].fillna("").tolist(),
-        embedding_model,
+    X_train_dense = load_or_embed_texts(
+        texts=prep_train_df["open_response"].fillna("").tolist(),
+        file_path=output_dir / "train_embeddings.npy",
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        recalculate=False,
     )
 
     model = DBSCAN(

@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 from loading_dataset import load_dataset
 from preprocess import preprocess_dataset
 from vectorization.sparse import apply_ngrams_and_vectorization
-from vectorization.dense import embed_texts
+from vectorization.dense import load_or_embed_texts
 from vectorization.hybrid import create_hybrid_embeddings
 from dbscan import DBSCAN
 
@@ -38,14 +38,11 @@ def main():
     #     print("Train:", tfidf_matrix_train.shape)
     #     #print(tfidf_matrix_train, ngrams_train)
 
-    embedding_model = SentenceTransformer(
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        local_files_only=True,
-    )
-    
-    X_train_dense = embed_texts(
-        prep_train_df["open_response"].fillna("").tolist(),
-        embedding_model,
+    X_train_dense = load_or_embed_texts(
+        texts=prep_train_df["open_response"].fillna("").tolist(),
+        file_path=output_dir / "train_embeddings.npy",
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        recalculate=False,
     )
 
     # X_hybrid_train = create_hybrid_embeddings(tfidf_matrix_train,X_train_dense)
