@@ -6,9 +6,10 @@ from sentence_transformers import SentenceTransformer
 from loading_dataset import load_dataset
 from preprocess import preprocess_dataset
 from vectorization.sparse import apply_ngrams_and_vectorization
-from vectorization.dense import embed_texts
+from vectorization.dense import embed_texts, apply_pca
 from vectorization.hybrid import create_hybrid_embeddings
 from dbscan import DBSCAN
+from silhouette_dense import evaluate_silhouette
 
 VERBOSE=True #set to false to skip terminal outputs
 
@@ -47,12 +48,34 @@ def main():
         prep_train_df["open_response"].fillna("").tolist(),
         embedding_model,
     )
-
+    ## FOR PCA ON DENSE EMBEDDINGS
+    X_train_pca = apply_pca(
+    X_train_dense,
+    variance_threshold=0.90
+    )
+  
     # X_hybrid_train = create_hybrid_embeddings(tfidf_matrix_train,X_train_dense)
 
-    model1=DBSCAN()
+   # DBSCAN evaluation
+    model1 = DBSCAN()
+    model1.fit(X_train_pca, precompute=True)
 
-    model1.fit(X_train_dense, precompute=True)
+    results = evaluate_silhouette(
+        model1,
+        eps_values=[0.3, 0.5, 0.7, 0.9, 1.1],
+        min_samples_values=[2, 3, 4, 5]
+    )
+
+    print("\nSilhouette results:")
+    print(results.to_string(index=False))
+
+    print("\nBest configurations:")
+    print(
+        results.sort_values(
+            "adjusted_silhouette",
+            ascending=False
+        ).head(5).to_string(index=False)
+    )
 
     counts, noise, candidates = model1.examine_parameters(
         eps_values=[0.3, 0.5, 0.7, 0.9, 1.1],

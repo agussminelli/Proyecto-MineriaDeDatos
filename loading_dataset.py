@@ -18,7 +18,6 @@ def convert_numeric_columns(headers, rows):
 
     for column, convert in converters.items():
         index = headers.index(column)
-
         for row in rows:
             value = row[index].strip()
             row[index] = convert(value) if value else None
