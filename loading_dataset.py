@@ -39,4 +39,4 @@ def load_dataset(dataset_dir=None):
     return train, test, train_headers, test_headers, dataset_dir
 
 if __name__ == "__main__":
-    train, test = load_dataset()
+    train, test, _, _, _ = load_dataset()
