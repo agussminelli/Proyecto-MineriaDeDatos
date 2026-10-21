@@ -29,10 +29,14 @@ def main():
         administrative_texts
     )
 
+    # datasets = {
+    #     "Original": original_texts,
+    #     "Administrative": administrative_texts,
+    #     "Fully cleaned": fully_cleaned_texts
+    # }
+
     datasets = {
-        "Original": original_texts,
-        "Administrative": administrative_texts,
-        "Fully cleaned": fully_cleaned_texts
+    "Original": original_texts
     }
 
     embedding_model = SentenceTransformer(
@@ -57,9 +61,9 @@ def main():
         model.fit(X_pca, precompute=True)
 
         scores = evaluate_silhouette(
-            model,
-            eps_values=[0.5, 0.6, 0.7],
-            min_samples_values=[3, 5]
+        model,
+        eps_values=[0.55, 0.575, 0.60, 0.625, 0.65],
+        min_samples_values=[3, 4, 5, 6, 8]
         )
 
         scores["dataset"] = name
