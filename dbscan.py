@@ -1,3 +1,5 @@
+from time import perf_counter
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -32,7 +34,11 @@ class DBSCAN:
     def _ensure_distance_matrix(self):
         self._prepare_distances()
 
+        # Time spent constructing the matrix in this call.
+        self.matrix_build_seconds_ = 0.0
+
         if self.distance_matrix_ is None:
+            started = perf_counter()
             n = len(self.X_)
             D = np.empty((n, n), dtype=float)
 
@@ -40,6 +46,7 @@ class DBSCAN:
                 D[i] = self._distances_from_point(i)
 
             self.distance_matrix_ = D
+            self.matrix_build_seconds_ = perf_counter() - started
 
     def _distances_from_point(self, i):
         point = self.X_[i]

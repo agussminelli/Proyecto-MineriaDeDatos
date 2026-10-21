@@ -237,12 +237,14 @@ def main(cfg: DictConfig):
     )
 
     model.fit(X, precompute=True)
+    matrix_build_seconds = model.matrix_build_seconds_
 
     results, assignments = evaluate_parameters(
         model,
         eps_values=eps_values,
         min_samples_values=min_samples_values,
         y_true=df["gs_text34"].to_numpy(),
+        y_true_grouped=df["gs_grouped"].to_numpy(),
         return_assignments=True,
     )
 
@@ -331,6 +333,7 @@ def main(cfg: DictConfig):
 
     runtime = {
         "elapsed_seconds": perf_counter() - started,
+        "matrix_build_seconds": matrix_build_seconds,
         "python": platform.python_version(),
         "packages": {name: version(name) for name in packages},
         "dbcv_core_distance": "logsumexp_patch",

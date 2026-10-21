@@ -65,11 +65,47 @@ def prepare_dbcv_labels(labels):
 
     return converted
 
+def calculate_ari(labels, y_true):
+    """Return ARI for all labelled cases and clustered labelled cases."""
+    if y_true is None:
+        return np.nan, np.nan
+
+    y = pd.Series(y_true).reset_index(drop=True)
+
+    if len(y) != len(labels):
+        raise ValueError("Reference labels must match clustering row order")
+
+    text = y.astype("string").str.strip()
+
+    valid = (
+        text.notna()
+        & ~text.str.casefold().isin(
+            ["", "na", "nan", "n/a", "none", "null"]
+        )
+    ).to_numpy(dtype=bool)
+
+    # Strings are valid reference labels for ARI.
+    values = text.fillna("").to_numpy(dtype=str)
+    clustered = valid & (labels > 0)
+
+    ari_all = (
+        adjusted_rand_score(values[valid], labels[valid])
+        if valid.sum() >= 2 else np.nan
+    )
+
+    ari_clustered = (
+        adjusted_rand_score(values[clustered], labels[clustered])
+        if clustered.sum() >= 2 else np.nan
+    )
+
+    return ari_all, ari_clustered
+
 def evaluate_parameters(
     model,
     eps_values,
     min_samples_values,
     y_true=None,
+    y_true_grouped=None,
     return_assignments=False,
 ):
     """Evaluate Silhouette and DBCV for each parameter combination.
@@ -137,23 +173,13 @@ def evaluate_parameters(
 
                 if np.any(labels == 0):
                     raise ValueError("Some points remain unassigned")
-                ari_all = np.nan
-                ari_clustered = np.nan
 
-                if y_true is not None:
-                    if labelled.sum() >= 2:
-                        ari_all = adjusted_rand_score(
-                            y_true[labelled],
-                            labels[labelled],
-                        )
+                ari_all, ari_clustered = calculate_ari(labels, y_true)
 
-                    selected = labelled & (labels > 0)
-
-                    if selected.sum() >= 2:
-                        ari_clustered = adjusted_rand_score(
-                            y_true[selected],
-                            labels[selected],
-                        )
+                ari_grouped_all, ari_grouped_clustered = calculate_ari(
+                    labels,
+                    y_true_grouped,
+                )
 
                 # Your DBSCAN uses positive IDs for clusters.
                 clustered_indices = np.flatnonzero(labels > 0)
@@ -214,6 +240,8 @@ def evaluate_parameters(
                     "dbcv": dbcv,
                     "ari_all": ari_all,
                     "ari_clustered": ari_clustered,
+                    "ari_grouped_all": ari_grouped_all,
+                    "ari_grouped_clustered": ari_grouped_clustered,
                 })
 
     finally:
