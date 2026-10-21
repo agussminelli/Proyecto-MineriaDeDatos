@@ -1,6 +1,7 @@
 #DBVC implemented for python in hdbscan
 #Silhouette from sklearn, corrected with noise after SWC
-
+from pathlib import Path
+from time import perf_counter
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -64,13 +65,39 @@ def prepare_dbcv_labels(labels):
 
     return converted
 
-def evaluate_parameters(model, eps_values, min_samples_values, y_true=None):
+def evaluate_parameters(
+    model,
+    eps_values,
+    min_samples_values,
+    y_true=None,
+    return_assignments=False,
+):
     """Evaluate Silhouette and DBCV for each parameter combination.
     ARI for Comparison, if GT is provided.
 
     Silhouette excludes noise; DBCV includes noise.
     Restores the model's original parameters and labels afterward.
     """
+    eps_values = list(eps_values)
+    min_samples_values = list(min_samples_values)
+
+    if not eps_values or not min_samples_values:
+        raise ValueError("Parameter ranges must not be empty")
+
+    for eps in eps_values:
+        if not np.isscalar(eps) or not np.isfinite(eps) or eps <= 0:
+            raise ValueError("eps values must be finite positive numbers")
+
+    for value in min_samples_values:
+        if (
+            not isinstance(value, (int, np.integer))
+            or isinstance(value, bool)
+            or value < 1
+        ):
+            raise ValueError("min_samples values must be positive integers")
+
+    assignments = {}
+
     if y_true is not None:
         y_true = np.asarray(y_true)
 
@@ -99,8 +126,15 @@ def evaluate_parameters(model, eps_values, min_samples_values, y_true=None):
             for min_samples in min_samples_values:
                 model.eps = float(eps)
                 model.min_samples = int(min_samples)
-
+                
+                fit_started = perf_counter()
                 labels = model.fit_predict()
+                fit_seconds = perf_counter() - fit_started
+                
+                run_key = f"grid_{len(results):04d}"
+                if return_assignments:
+                    assignments[run_key] = labels.copy()
+
                 if np.any(labels == 0):
                     raise ValueError("Some points remain unassigned")
                 ari_all = np.nan
@@ -168,6 +202,9 @@ def evaluate_parameters(model, eps_values, min_samples_values, y_true=None):
                     "eps": float(eps),
                     "min_samples": int(min_samples),
                     "metric": model.metric,
+                    "run_key": run_key,
+                    "p": float(model.p) if model.metric == "minkowski" else np.nan,
+                    "fit_seconds_cached": fit_seconds,
                     "n_clusters": int(n_clusters),
                     "coverage": coverage,
                     "noise_fraction": 1 - coverage,
@@ -188,7 +225,12 @@ def evaluate_parameters(model, eps_values, min_samples_values, y_true=None):
         elif hasattr(model, "labels_"):
             del model.labels_
 
-    return pd.DataFrame(results)
+    table = pd.DataFrame(results)
+
+    if return_assignments:
+        return table, assignments
+
+    return table
 
 def plot_evaluation(results):
     metrics = [
@@ -235,6 +277,188 @@ def plot_evaluation(results):
         fig.colorbar(image, ax=ax)
 
     plt.show()
+
+def save_cluster_examples(
+    df,
+    labels,
+    distance_matrix,
+    output_path,
+    clusters_per_group=3,
+    random_per_cluster=2,
+    noise_examples=5,
+    seed=42,
+):
+    """Save cluster examples as a UTF-8 text report.
+
+    Preconditions:
+        df, labels and distance_matrix use exactly the same row order.
+        Labels are -1 for noise and positive integers for clusters.
+        Distances match the representation and metric used for clustering.
+
+    Representatives:
+        Medoid: smallest mean distance to other cluster members.
+        Peripheral: largest distance from the medoid.
+        Random: sampled from remaining members without replacement.
+    """
+    labels = np.asarray(labels)
+    D = np.asarray(distance_matrix)
+    n = len(df)
+
+    if labels.shape != (n,) or D.shape != (n, n):
+        raise ValueError("Data, labels and distances must have matching shapes")
+
+    if np.any(labels < -1) or np.any(labels == 0):
+        raise ValueError("Expected -1 for noise and positive cluster IDs")
+
+    if "open_response" not in df.columns:
+        raise ValueError("df must contain open_response")
+
+    if clusters_per_group < 1 or random_per_cluster < 0 or noise_examples < 0:
+        raise ValueError("Invalid example counts")
+
+    rng = np.random.default_rng(seed)
+    lines = []
+
+    def add_distribution(group, column, top=None):
+        if column not in group.columns:
+            return
+
+        counts = group[column].fillna("<missing>").value_counts()
+        if top is not None:
+            counts = counts.head(top)
+
+        lines.append(f"{column}:")
+        for value, count in counts.items():
+            lines.append(
+                f"  {value}: {count} ({count / len(group):.1%})"
+            )
+
+    def add_text(index, role):
+        row = df.iloc[index]
+        identifier = row["newid"] if "newid" in df.columns else index
+
+        lines.append(f"\n[{role}] ID: {identifier}")
+
+        for column in ["module", "gs_text34"]:
+            if column in df.columns:
+                lines.append(f"{column}: {row[column]}")
+
+        text = row["open_response"]
+        lines.append("" if pd.isna(text) else str(text))
+
+    cluster_ids, sizes = np.unique(
+        labels[labels > 0],
+        return_counts=True,
+    )
+    size_map = dict(zip(cluster_ids, sizes))
+
+    lines.extend([
+        "CLUSTER INSPECTION",
+        f"Random seed: {seed}",
+        f"Total narratives: {n}",
+        f"Clusters: {len(cluster_ids)}",
+        f"Noise: {np.sum(labels == -1)}",
+        f"Noise fraction: {np.mean(labels == -1):.1%}",
+    ])
+
+    # Noise examples
+    noise_indices = np.flatnonzero(labels == -1)
+    sampled_noise = rng.choice(
+        noise_indices,
+        size=min(noise_examples, len(noise_indices)),
+        replace=False,
+    )
+
+    lines.append("\n" + "=" * 60)
+    lines.append("RANDOM NOISE EXAMPLES")
+
+    for index in sampled_noise:
+        add_text(index, "Random noise")
+
+    # Break size ties by cluster ID.
+    largest = sorted(
+        cluster_ids,
+        key=lambda c: (-size_map[c], c),
+    )[:clusters_per_group]
+
+    # Avoid printing the same cluster in both categories.
+    largest_set = set(largest)
+    smallest = sorted(
+        [c for c in cluster_ids if c not in largest_set],
+        key=lambda c: (size_map[c], c),
+    )[:clusters_per_group]
+
+    for heading, selected_clusters in [
+        ("LARGEST CLUSTERS", largest),
+        ("SMALLEST REMAINING CLUSTERS", smallest),
+    ]:
+        lines.append("\n" + "=" * 60)
+        lines.append(heading)
+
+        if not selected_clusters:
+            lines.append("No additional clusters available.")
+            continue
+
+        for cluster_id in selected_clusters:
+            members = np.flatnonzero(labels == cluster_id)
+            group = df.iloc[members]
+
+            lines.extend([
+                "\n" + "-" * 60,
+                f"Cluster {cluster_id}: {len(members)} narratives",
+                f"Share of dataset: {len(members) / n:.1%}",
+            ])
+
+            add_distribution(group, "module")
+            add_distribution(group, "gs_text34", top=5)
+
+            # Compute mean within-cluster distances in row batches,
+            # avoiding a full extra cluster-by-cluster matrix.
+            distance_sums = np.empty(len(members), dtype=float)
+
+            for start in range(0, len(members), 128):
+                stop = min(start + 128, len(members))
+                block = members[start:stop]
+
+                distance_sums[start:stop] = D[
+                    np.ix_(block, members)
+                ].sum(axis=1)
+
+            medoid = int(members[np.argmin(distance_sums)])
+            add_text(medoid, "Medoid")
+
+            selected = {medoid}
+
+            other_members = members[members != medoid]
+
+            if len(other_members):
+                peripheral = int(
+                    other_members[
+                        np.argmax(D[medoid, other_members])
+                    ]
+                )
+                add_text(peripheral, "Furthest from medoid")
+                selected.add(peripheral)
+
+            remaining = np.array(
+                [i for i in members if i not in selected],
+                dtype=int,
+            )
+
+            random_indices = rng.choice(
+                remaining,
+                size=min(random_per_cluster, len(remaining)),
+                replace=False,
+            )
+
+            for index in random_indices:
+                add_text(index, "Random member")
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+
+    return output_path
 
 
 #Use
