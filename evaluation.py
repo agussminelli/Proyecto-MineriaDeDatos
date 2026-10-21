@@ -489,7 +489,7 @@ def save_cluster_examples(
     return output_path
 
 
-#Use
+# Example Use
 if __name__ == "__main__":
     import pandas as pd
     from sentence_transformers import SentenceTransformer
@@ -511,15 +511,6 @@ if __name__ == "__main__":
         download=False
     )
 
-    # X_train_dense = load_or_embed_texts(
-    #     texts=prep_train_df["open_response_clean"].fillna("").tolist(),
-    #     file_path=output_dir / "train_embeddings.npy", 
-    #     model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-    #     recalculate=False,
-    # )
-
-    # X_train_dense_pca = apply_pca(X_train_dense, variance_threshold=0.8)
-
     tfidf_matrix_train, ngrams_train, _= lsa(
         prep_train_df["open_response_clean"].fillna(""),
         sparse_dimensions=100,
@@ -532,37 +523,8 @@ if __name__ == "__main__":
     )
 
     X = np.asarray(tfidf_matrix_train, dtype=np.float64)
-    #labels = model.fit_predict(X,precompute=True)
 
-    # evaluation_labels = prepare_dbcv_labels(labels)
-    # n_clusters = np.unique(
-    #     evaluation_labels[evaluation_labels >= 0]
-    # ).size
-
-    # noise_fraction = np.mean(evaluation_labels == -1)
-
-    # if n_clusters < 2:
-    #     score = np.nan
-    #     print("DBCV not evaluated: fewer than two clusters.")
-    # else: ## Use of precomputed distances
-    #     score = validity_index(
-    #             np.asarray(model.distance_matrix_, dtype=np.float64),
-    #             evaluation_labels,
-    #             metric="precomputed",
-    #             d=model.X_.shape[1],
-    #         )
-    #         # ## Recomputing distances
-    #         #     score = validity_index(
-    #         #         X,
-    #         #         evaluation_labels,
-    #         #         metric="euclidean",
-    #         #     )
-
-    # print("Clusters:", n_clusters)
-    # print(f"Noise: {noise_fraction:.1%}")
-    # print("DBCV:", score)
-
-    ### Or with Silhouette and DBVC and ARI
+    ### With Silhouette and DBVC and ARI
     model.fit(tfidf_matrix_train, precompute=True)
 
     # eps_values=[0.3,0.5, 0.7,0.9,1.1]
@@ -580,6 +542,7 @@ if __name__ == "__main__":
         eps_values,
         min_samples_values,
         y_true=prep_train_df["gs_text34"].to_numpy(),
+        y_true_grouped=prep_train_df["gs_grouped"].to_numpy(),
     )
 
     print(results.sort_values("dbcv", ascending=False))
@@ -587,27 +550,6 @@ if __name__ == "__main__":
     results.to_csv(
         output_dir / "clustering_evaluation.csv",
         index=False,
-    )
-
-    from sklearn.cluster import DBSCAN as ReferenceDBSCAN
-    from sklearn.metrics import adjusted_rand_score
-
-    your_labels = model.fit_predict(tfidf_matrix_train)
-
-    reference_labels = ReferenceDBSCAN(
-        eps=model.eps,
-        min_samples=model.min_samples,
-        metric="euclidean",
-    ).fit_predict(tfidf_matrix_train)
-
-    print(
-        "Agreement between implementations:",
-        adjusted_rand_score(your_labels, reference_labels),
-    )
-
-    print(
-        "Same noise assignments:",
-        np.array_equal(your_labels == -1, reference_labels == -1),
     )
 
     #plot_evaluation(results)
