@@ -81,9 +81,9 @@ def build_representation(df, cfg, cache_dir):
 
     if representation not in {"dense", "lsa", "hybrid"}:
         raise ValueError("representation must be dense, lsa or hybrid")
-
-    if representation != "dense" and cfg.pca.enabled:
-        raise ValueError("This runner applies PCA only to dense embeddings")
+    
+    if representation == "lsa" and cfg.pca.enabled:
+        raise ValueError("Embedding PCA does not apply to LSA-only experiments")
 
     if cfg.text_column not in df.columns:
         raise ValueError(f"Missing text column: {cfg.text_column}")
@@ -98,6 +98,24 @@ def build_representation(df, cfg, cache_dir):
 
     if representation in {"dense", "hybrid"}:
         dense, cache_key = load_dense(texts, cfg, cache_dir)
+        if cfg.pca.enabled:
+            threshold = float(cfg.pca.variance_threshold)
+
+            if not 0 < threshold < 1:
+                raise ValueError("PCA variance threshold must be between 0 and 1")
+
+            pca = PCA(
+                n_components=threshold,
+                svd_solver="full",
+            )
+            dense = pca.fit_transform(dense)
+
+            transformers["pca"] = pca
+
+            details["pca_retained_variance"] = float(
+                pca.explained_variance_ratio_.sum()
+            )
+            details["pca_components"] = int(pca.n_components_)
         details["embedding_cache_key"] = cache_key
 
     if representation in {"lsa", "hybrid"}:
@@ -137,24 +155,6 @@ def build_representation(df, cfg, cache_dir):
     if representation == "dense":
         X = dense
 
-        if cfg.pca.enabled:
-            threshold = float(cfg.pca.variance_threshold)
-
-            if not 0 < threshold < 1:
-                raise ValueError("PCA variance threshold must be between 0 and 1")
-
-            pca = PCA(
-                n_components=threshold,
-                svd_solver="full",
-            )
-            X = pca.fit_transform(X)
-            transformers["pca"] = pca
-
-            details["pca_retained_variance"] = float(
-                pca.explained_variance_ratio_.sum()
-            )
-            details["normalized_after_pca"] = False
-
     elif representation == "lsa":
         X = reduced
 
@@ -192,6 +192,8 @@ def main(cfg: DictConfig):
         OmegaConf.to_container(cfg, resolve=True),
         run_dir / "config_resolved.yaml",
     )
+    print(f"Representation: {cfg.representation}")
+    print(f"Text column: {cfg.text_column}")
 
     train, _, headers, _, data_dir = load_dataset()
     df = pd.DataFrame(train, columns=headers).reset_index(drop=True)
