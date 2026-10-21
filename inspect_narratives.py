@@ -1,26 +1,35 @@
 
 import pandas as pd
+import re
 
 from loading_dataset import load_dataset
 
 
-def inspect_phrases(texts, phrases):
+def remove_irrelevant_phrases(texts):
 
-    for phrase in phrases:
+    patterns = [
+        r"\bthe client thanked for services?\b",
+        r"\bthe client thanked for services? which provided by nurses and doctors in the hospital\b"
+    ]
 
-        mask = texts.str.contains(
-            phrase,
-            case=False,
-            regex=False,
-            na=False
-        )
+    cleaned_texts = []
 
-        print(f"\nPhrase: {phrase}")
-        print(f"Occurrences: {mask.sum()}")
-        print(f"Percentage: {mask.mean() * 100:.2f}%")
+    for text in texts:
+        cleaned = str(text)
 
-        for text in texts[mask].head(3):
-            print(f"\n{text[:500]}")
+        for pattern in patterns:
+            cleaned = re.sub(
+                pattern,
+                " ",
+                cleaned,
+                flags=re.IGNORECASE
+            )
+
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        cleaned_texts.append(cleaned)
+
+    return cleaned_texts
+
 
 def main():
 
@@ -30,13 +39,26 @@ def main():
 
     texts = train_df["open_response"].fillna("").astype(str)
 
-    phrases = [
-    "thank",
-    "hospital",
-    "client"
- ]
+    # Apply cleaning
+    original_texts = texts.tolist()
+    cleaned_texts = remove_irrelevant_phrases(original_texts)
 
-    inspect_phrases(texts, phrases)
+    # Compare original and cleaned narratives
+    n_modified = 0
+
+    for original, cleaned in zip(original_texts, cleaned_texts):
+        if original != cleaned:
+
+            n_modified += 1
+
+            print("\nORIGINAL:")
+            print(original[:500])
+
+            print("\nCLEANED:")
+            print(cleaned[:500])
+
+    print("\nModified narratives:", n_modified)
+    print("Total narratives:", len(original_texts))
 
 
 if __name__ == "__main__":
