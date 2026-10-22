@@ -1,3 +1,7 @@
+"""Historical silhouette exploration; final selection uses evaluation.py.
+
+The sweep leaves the model fitted at its last parameter pair.
+"""
 
 import numpy as np
 import pandas as pd
@@ -48,7 +52,8 @@ def evaluate_silhouette(model, eps_values, min_samples_values):
                     metric="precomputed"
                 )
 
-                # Penalize configurations with high noise
+                # Historical heuristic: weighting negative scores makes them
+                # less negative, so this is not a universal noise penalty.
                 adjusted_silhouette = silhouette * coverage
 
             results.append({

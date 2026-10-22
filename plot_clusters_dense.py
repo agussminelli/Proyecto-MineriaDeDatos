@@ -1,3 +1,5 @@
+"""Earlier raw-text/PCA visualization with experiment-specific parameters."""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,7 +17,8 @@ MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 def plot_dbscan_clusters_2d(X, labels, title, output_path):
     """
     Project data to 2D with PCA and plot DBSCAN clusters.
-    Noise points (-1) are shown in gray.
+    Noise points (-1) are shown separately.
+    This projection is a visualization, not the clustering space.
     """
     pca_2d = PCA(n_components=2)
     X_2d = pca_2d.fit_transform(X)
@@ -55,16 +58,11 @@ def plot_dbscan_clusters_2d(X, labels, title, output_path):
 
 def main():
     # Load data
-    train, _, train_headers, _, data_dir = load_dataset(
-    apply_grouping=False
-    )
+    train, _, train_headers, _, data_dir = load_dataset(apply_grouping=False)
     train_df = pd.DataFrame(train, columns=train_headers)
 
     # Preprocess
-    prep_train_df = preprocess_dataset(
-        train_df,
-        text_cols=["open_response"]
-    )
+    prep_train_df = preprocess_dataset(train_df,text_cols=["open_response"])
 
     texts = prep_train_df["open_response"].fillna("").tolist()
 
@@ -83,11 +81,7 @@ def main():
     eps = 0.625
     min_samples = 8
 
-    model = DBSCAN(
-        eps=eps,
-        min_samples=min_samples
-    )
-
+    model = DBSCAN(eps=eps,min_samples=min_samples)
     labels = model.fit_predict(X_pca)
 
     n_clusters = len(set(labels) - {-1})
@@ -96,7 +90,8 @@ def main():
     print("Clusters:", n_clusters)
     print(f"Noise fraction: {noise_fraction:.2%}")
 
-    output_path = data_dir / "output" / f"dbscan_dense_eps{eps}_min{min_samples}.png"
+    filename = f"dbscan_dense_eps{eps}_min{min_samples}.png"
+    output_path = data_dir / "output" / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     title = (
