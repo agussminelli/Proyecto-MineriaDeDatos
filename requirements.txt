@@ -1,0 +1,12 @@
+# Project dependencies. These are not a version-locked environment.
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+sentence-transformers
+nltk
+hydra-core
+omegaconf
+joblib
+hdbscan

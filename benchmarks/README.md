@@ -11,7 +11,7 @@ python benchmarks/benchmark_dbscan.py --sizes 100 250 500 --repeats 3 --output b
 python benchmarks/plot_results.py benchmark_results/blobs
 ```
 
-The benchmark requires Linux or macOS for `resource` peak-memory measurement. On Windows use WSL. It sets numerical thread counts to one. The core DBSCAN imports only NumPy; matplotlib is loaded only for its plotting method.
+The benchmark supports Windows through the process-memory API and Linux/macOS through `resource` peak-memory measurement. It sets numerical thread counts to one. The core DBSCAN imports only NumPy; matplotlib is loaded only for its plotting method.
 
 ## Synthetic examples
 
@@ -61,7 +61,7 @@ Use a distinct output directory for each run; files in a reused directory are ov
 
 ## Complexity discussion for the report
 
-For n points with d features, exhaustive neighbourhood calculations have an O(n²d) distance-work upper bound per fit. This implementation can also inspect O(n²) neighbour relations. On-demand distance calculation avoids storing an n-by-n matrix, but holds the O(nd) input, O(nd) temporary differences for some metrics, and O(n) clustering/queue arrays. Cosine recalculates norms during queries in the current implementation.
+For n points with d features, exhaustive neighbourhood calculations have an O(n²d) distance-work upper bound per fit. This implementation can also inspect O(n²) neighbour relations. On-demand distance calculation avoids storing an n-by-n matrix, but holds the O(nd) input, O(nd) temporary differences for some metrics, and O(n) clustering/queue arrays. The baseline cosine backend recalculates norms during queries; the optimized backend caches training-vector norms.
 
 Cached mode stores an additional O(n²) matrix and performs its O(n²d) construction once. Across G parameter combinations, distance work can therefore be amortized, while each fit still scans matrix rows and expands neighbourhoods. Worst-case sweep work is O(n²d + G*n²), versus O(G*n²d) exhaustive on-demand work. These are upper bounds; report observed costs alongside them and do not infer asymptotic scaling from only a few small measurements. Sklearn brute search can also consume quadratic memory through neighbourhood storage.
 
