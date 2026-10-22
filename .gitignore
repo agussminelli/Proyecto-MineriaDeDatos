@@ -3,3 +3,5 @@ LocalData/
 *.npy
 *.pyc
 experiments/
+
+benchmark_results/

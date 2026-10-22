@@ -1,11 +1,7 @@
 from time import perf_counter
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 
-from sklearn.metrics import silhouette_score, adjusted_rand_score
-from hdbscan.validity import validity_index
 
 class DBSCAN:
     def __init__(self, eps=0.5, min_samples=5,
@@ -217,6 +213,8 @@ class DBSCAN:
             eps_candidates: for every given min_samples_value
             y_true: provide with the true labels for ARI
         """
+        import matplotlib.pyplot as plt
+
         eps_values = list(eps_values)
         min_samples_values = list(min_samples_values)
 
