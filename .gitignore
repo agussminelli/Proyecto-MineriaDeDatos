@@ -6,3 +6,22 @@ experiments/
 coverage_review_50/
 predictions/
 benchmark_results/
+
+# Python environments and caches
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+
+# Generated model artifacts and local narrative inspection
+*.npz
+*.joblib
+predictions_child*/
+coverage_review*/
+examples_eps_*.txt
+example_texts.txt
+prediction_examples.txt
+examples.json
+
+# Locally placed datasets
+verbal_autopsy/
