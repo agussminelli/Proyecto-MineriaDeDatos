@@ -323,6 +323,9 @@ def save_cluster_examples(
         Labels are -1 for noise and positive integers for clusters.
         Distances match the representation and metric used for clustering.
 
+    Every example prints original (gs_text34) and grouped (gs_grouped)
+    labels; absent or empty labels are shown as <missing>.
+
     Representatives:
         Medoid: smallest mean distance to other cluster members.
         Peripheral: largest distance from the medoid.
@@ -367,9 +370,14 @@ def save_cluster_examples(
 
         lines.append(f"\n[{role}] ID: {identifier}")
 
-        for column in ["module", "gs_text34"]:
-            if column in df.columns:
-                lines.append(f"{column}: {row[column]}")
+        if "module" in df.columns:
+            lines.append(f"module: {row['module']}")
+        # Always display both reference fields, including for noise examples.
+        # Missing labels are explicit; never infer one from the other here.
+        for column in ["gs_text34", "gs_grouped"]:
+            value = row[column] if column in df.columns else None
+            shown = "<missing>" if pd.isna(value) or str(value).strip() == "" else str(value)
+            lines.append(f"{column}: {shown}")
 
         text = row["open_response"]
         lines.append("" if pd.isna(text) else str(text))
@@ -439,6 +447,7 @@ def save_cluster_examples(
 
             add_distribution(group, "module")
             add_distribution(group, "gs_text34", top=5)
+            add_distribution(group, "gs_grouped", top=5)
 
             # Compute mean within-cluster distances in row batches,
             # avoiding a full extra cluster-by-cluster matrix.
