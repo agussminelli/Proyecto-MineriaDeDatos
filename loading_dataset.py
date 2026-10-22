@@ -23,7 +23,7 @@ def convert_numeric_columns(headers, rows):
             value = row[index].strip()
             row[index] = convert(value) if value else None
 
-def load_dataset(dataset_dir=None):
+def load_dataset(dataset_dir=None, apply_grouping=True):
     if dataset_dir is None:
         dataset_dir = Path(__file__).resolve().parent.parent / "verbal_autopsy"
     else:
@@ -34,7 +34,9 @@ def load_dataset(dataset_dir=None):
 
     train_headers, train =  read_csv(traindata_path)   
     test_headers, test = read_csv(testdata_path)
-    train_headers, train = add_broad_labeling_to_ds(
+
+    if apply_grouping:
+        train_headers, train = add_broad_labeling_to_ds(
         train_headers, train, mapping_path
     )
         
