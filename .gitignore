@@ -2,3 +2,4 @@
 LocalData/
 *.npy
 *.pyc
+experiments/

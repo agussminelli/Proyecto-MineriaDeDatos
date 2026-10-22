@@ -1,9 +1,15 @@
+from time import perf_counter
+
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+
+from sklearn.metrics import silhouette_score, adjusted_rand_score
+from hdbscan.validity import validity_index
 
 class DBSCAN:
     def __init__(self, eps=0.5, min_samples=5,
-                 metric="euclidean", p=2): #TODO: What does p=2 mean...
+                 metric="euclidean", p=2):
         if eps <= 0:
             raise ValueError("eps must be positive")
         if not isinstance(min_samples, int) or min_samples < 1:
@@ -15,7 +21,7 @@ class DBSCAN:
         self.p = p
 
         self.distance_matrix_ = None
-        self._distance_config_ = None #TODO: What for?
+        self._distance_config_ = None
 
     def _region_query(self, i):
         if self.distance_matrix_ is not None:
@@ -26,19 +32,21 @@ class DBSCAN:
         return np.flatnonzero(distances <= self.eps)
 
     def _ensure_distance_matrix(self):
-        if not hasattr(self, "X_"):
-            raise ValueError("Provide data with fit(X) first")
+        self._prepare_distances()
+
+        # Time spent constructing the matrix in this call.
+        self.matrix_build_seconds_ = 0.0
 
         if self.distance_matrix_ is None:
+            started = perf_counter()
             n = len(self.X_)
-
-            # Assign the cache only after calculation succeeds.
             D = np.empty((n, n), dtype=float)
 
             for i in range(n):
                 D[i] = self._distances_from_point(i)
 
             self.distance_matrix_ = D
+            self.matrix_build_seconds_ = perf_counter() - started
 
     def _distances_from_point(self, i):
         point = self.X_[i]
@@ -53,7 +61,7 @@ class DBSCAN:
 
             if self.metric =="euclidean":
                 distances = np.sqrt(np.sum(differences**2, axis=1))
-            elif self.metric == "manhatten":
+            elif self.metric == "manhattan":
                 distances = np.sum(differences, axis=1)
             elif self.metric == "minkowski":
                 distances = np.sum(differences**self.p, axis=1)**(1.0/self.p)
@@ -199,13 +207,15 @@ class DBSCAN:
         return self.labels_.copy()
 
     # Visualisation Evaluation Function
-    def examine_parameters(self, eps_values, min_samples_values):
+    def examine_parameters(self, eps_values, min_samples_values, y_true=None):
         """Fit DBSCAN for each parameter pair and plot k-distance, clusters and noise.
+        Calculates Silhouette Score and DBVC per pair, as well as ARI if provided GT.
         Requires data already stored through fit(data=X).
         Returns:
             cluster_counts: shape (n_min_samples, n_eps).
             noise_fractions: same shape, values between 0 and 1.
             eps_candidates: for every given min_samples_value
+            y_true: provide with the true labels for ARI
         """
         eps_values = list(eps_values)
         min_samples_values = list(min_samples_values)
@@ -279,7 +289,7 @@ class DBSCAN:
         ax_distance.legend(fontsize=8)
 
         # separate model so experiments preserve current fit.
-        trial = DBSCAN()
+        trial = DBSCAN(metric=self.metric, p=self.p)
         trial.X_ = self.X_
         trial._prepare_distances()
         trial.distance_matrix_ = self.distance_matrix_
