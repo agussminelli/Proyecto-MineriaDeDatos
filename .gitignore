@@ -4,5 +4,5 @@ LocalData/
 *.pyc
 experiments/
 coverage_review_50/
-
+predictions/
 benchmark_results/

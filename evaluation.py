@@ -366,9 +366,9 @@ def save_cluster_examples(
 
     def add_text(index, role):
         row = df.iloc[index]
-        identifier = row["newid"] if "newid" in df.columns else index
-
-        lines.append(f"\n[{role}] ID: {identifier}")
+        
+        # identifier = row["newid"] if "newid" in df.columns else index
+        lines.append(f"\n[{role}]") # ID: {identifier}")
 
         if "module" in df.columns:
             lines.append(f"module: {row['module']}")

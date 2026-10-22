@@ -163,6 +163,7 @@ class DBSCAN:
 
     def _initialise(self):
         self.labels_ = np.zeros(len(self.X_), dtype=int)
+        self.core_sample_mask_ = np.zeros(len(self.X_), dtype=bool)
 
     def _find_clusters(self):
         self._initialise()
@@ -178,6 +179,7 @@ class DBSCAN:
                 self.labels_[i] = -1
             else:
                 cluster_id += 1
+                self.core_sample_mask_[i] = True
                 self._expand_cluster(i, neighbors, cluster_id)
 
 
@@ -203,6 +205,7 @@ class DBSCAN:
             neighbors_j = self._region_query(j)
 
             if len(neighbors_j) >= self.min_samples:
+                self.core_sample_mask_[j] = True
                 for neighbor in neighbors_j:
                     if neighbor not in queued:
                         queue.append(neighbor)
@@ -261,7 +264,112 @@ class DBSCAN:
             self._ensure_distance_matrix()
 
         self._find_clusters()
+        self.core_sample_indices_ = np.flatnonzero(self.core_sample_mask_)
         return self
+
+    def predict(self, X):
+        """Assign unseen points to the nearest fitted core point within eps.
+
+        This is an explicit inductive extension to DBSCAN, which does not
+        define a canonical prediction rule. Ties are resolved by the first
+        core point in training order. Return -1 when no core is within eps.
+        Requires a preceding fit; training noise and border points cannot
+        attract new points.
+        """
+        if not hasattr(self, "labels_"):
+            raise ValueError("Call fit before predict")
+        
+        new = np.asarray(X, dtype=float)
+        if new.ndim == 1:
+            new = new.reshape(1, -1)
+        if new.ndim != 2 or new.shape[1] != self.X_.shape[1]:
+            raise ValueError("X must have shape (n_points, fitted_features)")
+        if not np.isfinite(new).all():
+            raise ValueError("X must contain only finite values")
+
+        core_idx = self.core_sample_indices_
+        result = np.full(len(new), -1, dtype=int)
+        nearest = np.full(len(new), -1, dtype=int)
+
+        if not len(core_idx):
+            self.nearest_core_indices_ = nearest
+            return result
+        
+        cores = self.X_[core_idx]
+
+        for row, point in enumerate(new):
+            delta = np.abs(cores - point)
+            if self.metric == "euclidean":
+                distances = np.sqrt(np.sum(delta**2, axis=1))
+            elif self.metric == "manhattan":
+                distances = np.sum(delta, axis=1)
+            elif self.metric == "minkowski":
+                distances = np.sum(delta**self.p, axis=1)**(1.0/self.p)
+            else:
+                point_norm = np.linalg.norm(point)
+                if point_norm == 0:
+                    raise ValueError("Cosine distance is undefined for zero vectors")
+                core_norms = (self._cosine_norms_[core_idx]
+                              if self.distance_backend == "optimized"
+                              else np.linalg.norm(cores, axis=1))
+                distances = 1.0 - np.clip((cores @ point)/(core_norms*point_norm), -1., 1.)
+
+            best = int(np.argmin(distances))
+            if distances[best] <= self.eps:
+                nearest[row] = core_idx[best]
+                result[row] = self.labels_[core_idx[best]]
+
+        self.nearest_core_indices_ = nearest
+
+        return result
+
+    def nearest_examples(self, X, texts, n=5):
+        """Return nearest training texts from the predicted cluster.
+
+        Returns an empty list for a new point classified as noise. Each result
+        contains the training row index, cluster label, metric distance, and
+        matching text. The order is stable for equal distances.
+        """
+        if not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 1:
+            raise ValueError("n must be a positive integer")
+        if len(texts) != len(self.X_):
+            raise ValueError("texts must match the fitted training row order")
+        
+        point = np.asarray(X, dtype=float)
+
+        if point.ndim == 2 and point.shape[0] == 1:
+            point = point[0]
+        if point.ndim != 1:
+            raise ValueError("X must be one feature vector")
+        
+        label = int(self.predict(point)[0])
+        if label == -1:
+            return []
+        
+        indices = np.flatnonzero(self.labels_ == label)
+        candidates = self.X_[indices]
+        delta = np.abs(candidates - point)
+
+        if self.metric == "euclidean":
+            distances = np.sqrt(np.sum(delta**2, axis=1))
+        elif self.metric == "manhattan":
+            distances = np.sum(delta, axis=1)
+        elif self.metric == "minkowski":
+            distances = np.sum(delta**self.p, axis=1)**(1.0/self.p)
+        else:
+            point_norm = np.linalg.norm(point)
+            if point_norm == 0:
+                raise ValueError("Cosine distance is undefined for zero vectors")
+            norms = (self._cosine_norms_[indices]
+                     if self.distance_backend == "optimized"
+                     else np.linalg.norm(candidates, axis=1))
+            distances = 1.0 - np.clip((candidates @ point)/(norms*point_norm), -1., 1.)
+
+        order = np.lexsort((indices, distances))[:n]
+
+        return [dict(index=int(indices[j]), cluster=label,
+                     distance=float(distances[j]), text=str(texts[indices[j]]))
+                for j in order]
 
     def fit_predict(self, X=None, precompute=False):
         """Fit and return a copy of the cluster assignments."""

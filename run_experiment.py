@@ -264,6 +264,7 @@ def main(cfg: DictConfig):
         min_samples=int(min_samples_values[0]),
         metric=cfg.clustering.metric,
         p=cfg.clustering.p,
+        distance_backend="optimized",
     )
 
     model.fit(X, precompute=True)
@@ -441,6 +442,7 @@ def print_parameter_examples(
         min_samples=int(min_samples),
         metric=result["metric"],
         p=2 if pd.isna(p) else float(p),
+        distance_backend="optimized",
     )
     model.fit(X, precompute=True)
 
@@ -471,25 +473,26 @@ def print_parameter_examples(
 
 if __name__ == "__main__":
 
-    main()
-    # from pathlib import Path
-    # import pandas as pd
+    #main()
+    from pathlib import Path
+    import pandas as pd
 
-    # from loading_dataset import load_dataset
+    from loading_dataset import load_dataset
 
 
-    # train, _, headers, _, _ = load_dataset()
-    # df = pd.DataFrame(train, columns=headers)
+    train, _, headers, _, _ = load_dataset()
+    df = pd.DataFrame(train, columns=headers)
 
-    # df_child = df.loc[
-    #     df["module"].astype(str).str.strip().str.casefold() == "child"
-    # ].reset_index(drop=True)
+    df_child = df.loc[
+        df["module"].astype(str).str.strip().str.casefold() == "child"
+    ].reset_index(drop=True)
 
-    # print_parameter_examples(
-    #     run_dir=Path(
-    #         "experiments/2026-10-21/17-52-39-553828"
-    #     ),
-    #     df=df_child,
-    #     eps=0.775,
-    #     min_samples=5,
-    # )
+    run_dir = Path("experiments/2026-10-21/17-52-39-553828")
+
+    for eps, min_samples in [(0.725, 5), (0.675, 3)]:
+        print_parameter_examples(
+            run_dir=run_dir,
+            df=df_child,  # your original Child experiment DataFrame
+            eps=eps,
+            min_samples=min_samples,
+        )
