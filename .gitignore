@@ -3,5 +3,6 @@ LocalData/
 *.npy
 *.pyc
 experiments/
+coverage_review_50/
 
 benchmark_results/
