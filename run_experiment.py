@@ -63,6 +63,12 @@ def load_dense(texts, cfg, cache_dir):
         "cache_schema": 1,
     }
     cache_key = fingerprint(cache_spec)
+    cache_path = cache_dir / f"dense_{cache_key}.npy"
+
+    cache_hit = (
+        cache_path.exists()
+        and not cfg.embedding.recalculate
+    )
 
     X = load_or_embed_texts(
         texts=texts,
@@ -72,7 +78,7 @@ def load_dense(texts, cfg, cache_dir):
         local_files_only=cfg.embedding.local_files_only,
     )
 
-    return X, cache_key
+    return X, cache_key, cache_hit
 
 
 def build_representation(df, cfg, cache_dir):
@@ -97,7 +103,7 @@ def build_representation(df, cfg, cache_dir):
     }
 
     if representation in {"dense", "hybrid"}:
-        dense, cache_key = load_dense(texts, cfg, cache_dir)
+        dense, cache_key, cache_hit = load_dense(texts, cfg, cache_dir)
         if cfg.pca.enabled:
             threshold = float(cfg.pca.variance_threshold)
 
@@ -116,7 +122,9 @@ def build_representation(df, cfg, cache_dir):
                 pca.explained_variance_ratio_.sum()
             )
             details["pca_components"] = int(pca.n_components_)
+
         details["embedding_cache_key"] = cache_key
+        details["embedding_cache_hit"] = cache_hit
 
     if representation in {"lsa", "hybrid"}:
         tfidf, _, vectorizer = apply_ngrams_and_vectorization(
@@ -198,19 +206,39 @@ def main(cfg: DictConfig):
     train, _, headers, _, data_dir = load_dataset()
     df = pd.DataFrame(train, columns=headers).reset_index(drop=True)
 
+    # Submodules or entire Dataset
+    if cfg.dataset.module != "all":
+        mask = (
+            df["module"].astype(str).str.strip().str.casefold()
+            == str(cfg.dataset.module).casefold()
+        )
+        df = df.loc[mask].reset_index(drop=True)
+
+        if df.empty:
+            raise ValueError(
+                f"No narratives for module: {cfg.dataset.module}"
+            )
+
+    print(f"Module: {cfg.dataset.module}; narratives: {len(df)}")
+
     # Original text does not require the cleaning pipeline.
+
     if cfg.text_column != "open_response":
+        preprocess_started = perf_counter()
         df = preprocess_dataset(
             df=df,
             text_cols=["open_response"],
             download=cfg.preprocess.download,
         )
+        preprocess_seconds = perf_counter() - preprocess_started
 
     cache_dir = Path(data_dir) / "output" / "embedding_cache"
 
+    vectorization_started = perf_counter()
     X, transformers, details = build_representation(
         df, cfg, cache_dir
     )
+    vectorization_seconds = perf_counter() - vectorization_started
 
     # Save representation and row alignment before expensive evaluation.
     np.save(run_dir / "features.npy", X)
@@ -335,6 +363,8 @@ def main(cfg: DictConfig):
 
     runtime = {
         "elapsed_seconds": perf_counter() - started,
+        "preprocess_seconds": preprocess_seconds,
+        "vectorization": vectorization_seconds,
         "matrix_build_seconds": matrix_build_seconds,
         "python": platform.python_version(),
         "packages": {name: version(name) for name in packages},
@@ -353,6 +383,113 @@ def main(cfg: DictConfig):
     print(results.sort_values("dbcv", ascending=False).to_string(index=False))
     print(f"\nSaved experiment: {run_dir}")
 
+def print_parameter_examples(
+    run_dir,
+    df,
+    eps=0.775,
+    min_samples=5,
+    seed=42,
+):
+    """Print and save examples for an already evaluated parameter pair.
+
+    df must contain the same narratives in the same order as the run.
+    """
+    from pathlib import Path
+
+    run_dir = Path(run_dir)
+
+    metrics = pd.read_csv(run_dir / "metrics.csv")
+    saved_rows = pd.read_csv(
+        run_dir / "rows.csv",
+        dtype={"newid": str},
+    )
+
+    # Verify alignment against the saved experiment.
+    ids = df["newid"].astype(str).to_numpy()
+
+    if not np.array_equal(ids, saved_rows["newid"].to_numpy()):
+        raise ValueError(
+            "DataFrame IDs/order do not match this experiment"
+        )
+
+    matching = metrics.loc[
+        np.isclose(metrics["eps"], eps, rtol=0, atol=1e-10)
+        & (metrics["min_samples"] == min_samples)
+    ]
+
+    if len(matching) != 1:
+        raise ValueError(
+            "Expected exactly one saved result for these parameters"
+        )
+
+    result = matching.iloc[0]
+
+    with np.load(
+        run_dir / "assignments.npz",
+        allow_pickle=False,
+    ) as saved:
+        labels = saved[result["run_key"]].copy()
+
+    # Reconstruct distances from saved vectors using the run's metric.
+    from dbscan import DBSCAN
+
+    X = np.load(run_dir / "features.npy", allow_pickle=False)
+
+    p = result.get("p", np.nan)
+    model = DBSCAN(
+        eps=float(eps),
+        min_samples=int(min_samples),
+        metric=result["metric"],
+        p=2 if pd.isna(p) else float(p),
+    )
+    model.fit(X, precompute=True)
+
+    if not np.array_equal(model.labels_, labels):
+        raise RuntimeError(
+            "Recomputed assignments differ from the saved run"
+        )
+
+    output_path = run_dir / (
+        f"examples_eps_{eps:g}_min_samples_{min_samples}.txt"
+    )
+
+    save_cluster_examples(
+        df=df,
+        labels=labels,
+        distance_matrix=model.distance_matrix_,
+        output_path=output_path,
+        seed=seed,
+    )
+
+    print(result.to_string())
+    print()
+    print(output_path.read_text(encoding="utf-8"))
+    print("\nSaved to:", output_path.resolve())
+
+    return output_path
+
 
 if __name__ == "__main__":
+
     main()
+    # from pathlib import Path
+    # import pandas as pd
+
+    # from loading_dataset import load_dataset
+
+
+    # train, _, headers, _, _ = load_dataset()
+    # df = pd.DataFrame(train, columns=headers)
+
+    # df_child = df.loc[
+    #     df["module"].astype(str).str.strip().str.casefold() == "child"
+    # ].reset_index(drop=True)
+
+    # print_parameter_examples(
+    #     run_dir=Path(
+    #         "experiments/2026-10-21/17-52-39-553828"
+    #     ),
+    #     df=df_child,
+    #     eps=0.775,
+    #     min_samples=5,
+    # )

@@ -1,4 +1,7 @@
-representation: dense  # dense, lsa, hybrid
+dataset:
+  module: all # all, Neonate, Child, Adult
+
+representation: hybrid  # dense, lsa, hybrid
 text_column: open_response_clean
 
 preprocess:
@@ -19,7 +22,7 @@ lsa:
   n_components: 50
 
 pca:
-  enabled: false
+  enabled: true
   variance_threshold: 0.95
 
 hybrid:
