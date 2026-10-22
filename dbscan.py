@@ -19,6 +19,7 @@ class DBSCAN:
         self.distance_backend = distance_backend
         self.block_size = block_size
         self._euclidean_X_ = None
+        self._cosine_norms_ = None
 
         self.distance_matrix_ = None
         self._distance_config_ = None
@@ -68,7 +69,8 @@ class DBSCAN:
         point = self.X_[i]
 
         if self.metric == "cosine":
-            norms = np.linalg.norm(self.X_, axis=1)
+            norms = (self._cosine_norms_ if self.distance_backend == "optimized"
+                     else np.linalg.norm(self.X_, axis=1))
             similarities= (self.X_@point)/(norms*norms[i])
 
             distances = 1.0 - np.clip(similarities, -1.0, 1.0)
@@ -127,7 +129,13 @@ class DBSCAN:
             raise ValueError("Provide data with fit(X) first")
 
         if self.metric == "cosine":
-            if np.any(np.linalg.norm(self.X_, axis=1) == 0):
+            if self.distance_backend == "optimized":
+                if self._cosine_norms_ is None:
+                    self._cosine_norms_ = np.linalg.norm(self.X_, axis=1)
+                norms = self._cosine_norms_
+            else:
+                norms = np.linalg.norm(self.X_, axis=1)
+            if np.any(norms == 0):
                 raise ValueError(
                     "Cosine distance is undefined for zero vectors. "
                     "Remove empty-vector rows while preserving their "
@@ -242,6 +250,7 @@ class DBSCAN:
 
             self.X_ = X.copy()
             self._euclidean_X_ = None
+            self._cosine_norms_ = None
             self.distance_matrix_ = None
 
         elif not hasattr(self, "X_"):
