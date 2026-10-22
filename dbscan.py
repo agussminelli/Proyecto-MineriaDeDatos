@@ -5,7 +5,8 @@ import numpy as np
 
 class DBSCAN:
     def __init__(self, eps=0.5, min_samples=5,
-                 metric="euclidean", p=2):
+                 metric="euclidean", p=2, distance_backend="baseline",
+                 block_size=256):
         if eps <= 0:
             raise ValueError("eps must be positive")
         if not isinstance(min_samples, int) or min_samples < 1:
@@ -15,6 +16,9 @@ class DBSCAN:
         self.min_samples = min_samples
         self.metric = metric
         self.p = p
+        self.distance_backend = distance_backend
+        self.block_size = block_size
+        self._euclidean_X_ = None
 
         self.distance_matrix_ = None
         self._distance_config_ = None
@@ -25,6 +29,15 @@ class DBSCAN:
         else:
             distances = self._distances_from_point(i)
 
+        # Recheck numerically borderline neighbours using direct subtraction.
+        # This also applies when a cached matrix is reused with a different eps.
+        if self.distance_backend == "optimized" and self.metric == "euclidean":
+            bound = self._roundoff_factor_ * (self._squared_norms_[i] + self._squared_norms_)
+            near = np.flatnonzero(np.abs(distances**2 - self.eps**2) <= bound)
+            if len(near):
+                distances = distances.copy()
+                delta = self.X_[near] - self.X_[i]
+                distances[near] = np.sqrt(np.sum(delta * delta, axis=1))
         return np.flatnonzero(distances <= self.eps)
 
     def _ensure_distance_matrix(self):
@@ -38,13 +51,20 @@ class DBSCAN:
             n = len(self.X_)
             D = np.empty((n, n), dtype=float)
 
-            for i in range(n):
-                D[i] = self._distances_from_point(i)
+            if self.distance_backend == "optimized" and self.metric == "euclidean":
+                for start in range(0, n, self.block_size):
+                    stop = min(start + self.block_size, n)
+                    D[start:stop] = self._euclidean_block(start, stop)
+            else:
+                for i in range(n):
+                    D[i] = self._distances_from_point(i)
 
             self.distance_matrix_ = D
             self.matrix_build_seconds_ = perf_counter() - started
 
     def _distances_from_point(self, i):
+        if self.distance_backend == "optimized" and self.metric == "euclidean":
+            return self._euclidean_block(i, i + 1)[0]
         point = self.X_[i]
 
         if self.metric == "cosine":
@@ -66,8 +86,34 @@ class DBSCAN:
         distances[i]=0.0
         return distances
 
+    def _euclidean_block(self, start, stop):
+        """Euclidean distances via centred dot products; bounded temporary memory.
+
+        Recompute cancellation-prone pairs directly, then set the diagonal
+        exactly to zero. Uses NumPy only; no external distance implementation.
+        """
+        Z = self._euclidean_X_
+        squared = Z[start:stop] @ Z.T
+        squared *= -2.0
+        squared += self._squared_norms_[start:stop, None]
+        squared += self._squared_norms_[None, :]
+        for row, i in enumerate(range(start, stop)):
+            bound = self._roundoff_factor_ * (self._squared_norms_[i] + self._squared_norms_)
+            suspect = np.flatnonzero(squared[row] <= bound)
+            if len(suspect):
+                delta = self.X_[suspect] - self.X_[i]
+                squared[row, suspect] = np.sum(delta * delta, axis=1)
+        np.maximum(squared, 0.0, out=squared)
+        np.sqrt(squared, out=squared)
+        squared[np.arange(stop - start), np.arange(start, stop)] = 0.0
+        return squared
+
     def _prepare_distances(self):
         """Validate distance settings and clear an incompatible cache."""
+        if self.distance_backend not in {"baseline", "optimized"}:
+            raise ValueError("distance_backend must be baseline or optimized")
+        if not isinstance(self.block_size, (int, np.integer)) or self.block_size < 1:
+            raise ValueError("block_size must be a positive integer")
         allowed = {"euclidean", "manhattan", "cosine", "minkowski"}
 
         if self.metric not in allowed:
@@ -88,7 +134,17 @@ class DBSCAN:
                     "matching IDs, or choose another metric."
                 )
 
+        if self.distance_backend == "optimized" and self.metric == "euclidean":
+            if self._euclidean_X_ is None:
+                # Translation preserves distances and reduces cancellation for
+                # data with a large shared offset. Reset on every fit(new_X).
+                self._euclidean_X_ = self.X_ - self.X_[0]
+                self._squared_norms_ = np.sum(self._euclidean_X_**2, axis=1)
+                self._roundoff_factor_ = 64 * np.finfo(float).eps * self.X_.shape[1]
+
         config = (
+            self.distance_backend,
+            self.block_size,
             self.metric,
             self.p if self.metric == "minkowski" else None,
         )
@@ -185,6 +241,7 @@ class DBSCAN:
                 raise ValueError("X must contain only finite values")
 
             self.X_ = X.copy()
+            self._euclidean_X_ = None
             self.distance_matrix_ = None
 
         elif not hasattr(self, "X_"):
@@ -287,7 +344,8 @@ class DBSCAN:
         ax_distance.legend(fontsize=8)
 
         # separate model so experiments preserve current fit.
-        trial = DBSCAN(metric=self.metric, p=self.p)
+        trial = DBSCAN(metric=self.metric, p=self.p,
+                       distance_backend=self.distance_backend, block_size=self.block_size)
         trial.X_ = self.X_
         trial._prepare_distances()
         trial.distance_matrix_ = self.distance_matrix_

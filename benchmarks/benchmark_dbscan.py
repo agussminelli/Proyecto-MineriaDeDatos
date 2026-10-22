@@ -35,7 +35,7 @@ def agreement(a, b):
             'noise_equal': bool(np.array_equal(a == -1, b == -1))}
 
 
-def correctness():
+def correctness(distance_backend="baseline", block_size=256):
     blobs = make_blobs(n_samples=120, centers=[[-3, -3], [3, 3]],
                        cluster_std=.2, random_state=42)[0]
     moons = make_moons(n_samples=150, noise=.02, random_state=42)[0]
@@ -55,18 +55,18 @@ def correctness():
         for metric, p in [('euclidean', 2), ('manhattan', 1), ('minkowski', 3)]:
             expected = reference(X, eps, minimum, metric, p)
             for cached in (False, True):
-                actual = DBSCAN(eps, minimum, metric, p).fit_predict(X, precompute=cached)
+                actual = DBSCAN(eps, minimum, metric, p, distance_backend, block_size).fit_predict(X, precompute=cached)
                 result = agreement(actual, expected)
                 rows.append(dict(case=name, metric=metric, cached=cached, **result))
     rng = np.random.default_rng(42)
     X = np.vstack([rng.normal([1, 0, 0], .03, size=(30, 3)),
                    rng.normal([0, 1, 0], .03, size=(30, 3)), [[0, 0, 1]]])
     for cached in (False, True):
-        actual = DBSCAN(.02, 4, 'cosine').fit_predict(X, precompute=cached)
+        actual = DBSCAN(.02, 4, 'cosine', distance_backend=distance_backend).fit_predict(X, precompute=cached)
         rows.append(dict(case='cosine_directions', metric='cosine', cached=cached,
                          **agreement(actual, reference(X, .02, 4, 'cosine', 2))))
     # Independent expectations prevent shared agreement from hiding trivial errors.
-    border = DBSCAN(.11, 3).fit_predict(cases[5][1])
+    border = DBSCAN(.11, 3, distance_backend=distance_backend).fit_predict(cases[5][1])
     if not np.all(border == border[0]) or border[0] == -1:
         raise AssertionError('Initially noisy border point was not reassigned')
     if not all(r['ari'] == 1.0 and r['noise_equal'] for r in rows):
@@ -130,7 +130,8 @@ def worker(spec):
             labels = reference(X, eps, minimum, spec['metric'], spec['p'])
         else:
             if model is None:
-                model = DBSCAN(eps, minimum, spec['metric'], spec['p'])
+                model = DBSCAN(eps, minimum, spec['metric'], spec['p'],
+                               spec['distance_backend'], spec['block_size'])
                 labels = model.fit_predict(X, precompute=spec['variant'] == 'own_cached')
                 matrix_seconds = getattr(model, 'matrix_build_seconds_', 0.0)
             else:
@@ -164,6 +165,8 @@ def main():
     parser.add_argument('--eps', type=float, nargs='+', default=[.2, .35, .5])
     parser.add_argument('--min-samples', type=int, nargs='+', default=[4, 8])
     parser.add_argument('--metric', choices=['euclidean', 'manhattan', 'minkowski', 'cosine'], default='euclidean')
+    parser.add_argument('--distance-backend', choices=['baseline', 'optimized'], default='baseline')
+    parser.add_argument('--block-size', type=int, default=256)
     parser.add_argument('--p', type=float, default=2.)
     parser.add_argument('--repeats', type=int, default=3)
     parser.add_argument('--seed', type=int, default=42)
@@ -179,8 +182,10 @@ def main():
         parser.error('Use positive repeats and sizes >= 2')
     if min(args.eps) <= 0 or min(args.min_samples) < 1:
         parser.error('eps must be positive and min-samples >= 1')
+    if args.output.exists() and any(args.output.iterdir()):
+        parser.error("Output directory is not empty; choose a new name to preserve previous results")
     args.output.mkdir(parents=True, exist_ok=True)
-    checks = correctness()
+    checks = correctness(args.distance_backend, args.block_size)
     write_csv(args.output / 'correctness.csv', checks)
     print(f'Passed {len(checks)} reference comparisons plus independent border assertion.', flush=True)
     if args.correctness_only:
@@ -214,7 +219,7 @@ def main():
                     sampling='Nested seeded subsets; fixed across repetitions; not stratified',
                     dbscan_sha256=hashlib.sha256((Path(__file__).resolve().parents[1] / 'dbscan.py').read_bytes()).hexdigest())
     (args.output / 'metadata.json').write_text(json.dumps(metadata, indent=2))
-    rows, comparisons = [], []
+    rows, comparisons, failures = [], [], []
     rng = np.random.default_rng(args.seed)
     order = rng.permutation(len(X))
     with tempfile.TemporaryDirectory() as temp:
@@ -228,36 +233,52 @@ def main():
                     outputs = {}
                     for variant in rng.permutation(VARIANTS):
                         spec = dict(features=str(features), indices=str(indices), grid=current_grid,
-                                    metric=args.metric, p=args.p, variant=str(variant))
-                        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker'],
-                                              input=json.dumps(spec), text=True, capture_output=True,
-                                              timeout=args.timeout, check=True)
+                                    metric=args.metric, p=args.p, variant=str(variant),
+                                    distance_backend=args.distance_backend, block_size=args.block_size)
+                        print(f'Starting n={n}, {scenario}, repetition {repeat+1}/{args.repeats}: {variant}', flush=True)
+                        try:
+                            proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker'],
+                                                  input=json.dumps(spec), text=True, capture_output=True,
+                                                  timeout=args.timeout, check=True)
+                        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+                            failures.append(dict(n=n, scenario=scenario, repeat=repeat, variant=variant,
+                                                 status='timeout' if isinstance(error, subprocess.TimeoutExpired) else 'error',
+                                                 worker_timeout_seconds=args.timeout, detail=str(error)))
+                            write_csv(args.output / 'failures.csv', failures)
+                            print(f'  Failed: {variant}; recorded in failures.csv, continuing.', flush=True)
+                            continue
                         result = json.loads(proc.stdout)
                         outputs[variant] = [np.asarray(a) for a in result.pop('assignments')]
                         rows.append(dict(n=n, dimensions=X.shape[1], scenario=scenario, repeat=repeat,
-                                         variant=variant, configurations=len(current_grid), **result))
+                                         variant=variant, distance_backend=args.distance_backend, configurations=len(current_grid), **result))
                         write_csv(args.output / 'timings.csv', rows)
                     for variant in VARIANTS[:2]:
+                        if variant not in outputs or 'sklearn_brute' not in outputs:
+                            continue
                         for i, (actual, expected) in enumerate(zip(outputs[variant], outputs['sklearn_brute'])):
                             a = agreement(actual, expected)
                             comparisons.append(dict(n=n, scenario=scenario, repeat=repeat, variant=variant,
                                                     eps=current_grid[i][0], min_samples=current_grid[i][1],
                                                     n_clusters=len(set(actual) - {-1}),
                                                     noise_fraction=float(np.mean(actual == -1)), **a))
-                    write_csv(args.output / 'agreement.csv', comparisons)
-                    print(f'Completed n={n}, {scenario}, repetition {repeat+1}/{args.repeats}', flush=True)
+                    if comparisons:
+                        write_csv(args.output / 'agreement.csv', comparisons)
+                    print(f'Finished n={n}, {scenario}, repetition {repeat+1}/{args.repeats}; {len(outputs)}/3 successful', flush=True)
     summaries = []
     for n in sizes:
         for scenario in ('single_fit', 'parameter_sweep'):
             for variant in VARIANTS:
                 subset = [r for r in rows if r['n'] == n and r['scenario'] == scenario and r['variant'] == variant]
-                summaries.append(dict(n=n, scenario=scenario, variant=variant,
+                if not subset:
+                    continue
+                summaries.append(dict(n=n, scenario=scenario, variant=variant, completed_repeats=len(subset),
                     median_seconds=float(np.median([r['seconds'] for r in subset])),
                     min_seconds=min(r['seconds'] for r in subset), max_seconds=max(r['seconds'] for r in subset),
                     median_process_peak_rss_mib=float(np.median([r['process_peak_rss_bytes'] for r in subset]))/1024**2))
-    write_csv(args.output / 'summary.csv', summaries)
+    if summaries:
+        write_csv(args.output / 'summary.csv', summaries)
     mismatches = sum(r['ari'] != 1.0 or not r['noise_equal'] for r in comparisons)
-    print(f'Done. {mismatches} benchmark partition mismatches; inspect agreement.csv before interpreting performance.')
+    print(f'Done. {len(failures)} failed measurements. {mismatches} benchmark partition mismatches; inspect agreement.csv before interpreting performance.')
 
 
 if __name__ == '__main__':
