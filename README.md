@@ -1,11 +1,13 @@
 # Proyecto-MineriaDeDatos
 
 ## Loading the Dataset
+
 Locate the dataset in a folder named "verbal_autopsy" parallel to the git-repository folder, not _*IN*_ the git folder.
 
 ## DBSCAN validation and performance
 
 See [the benchmark guide](benchmarks/README.md) for reproducible correctness checks, runtime and memory measurements, and evaluation on saved verbal-autopsy feature matrices.
+
 # DBSCAN clustering of verbal-autopsy narratives
 
 Custom DBSCAN implementation, reproducible representation experiments, runtime
@@ -51,6 +53,21 @@ These setup operations require internet access.
 analyses. They may contain experiment-specific settings; use the entry points
 above for the final workflow. Files remain in their original locations to
 preserve imports.
+
+## Toy Example
+
+Here is a quick toy example to check the functionality of our implemented DBSCAN with the moons dataset from sklearn.
+
+```powershell
+py -m benchmarks.benchmark_dbscan `
+    --dataset moons `
+    --sizes 250 `
+    --eps 0.18 `
+    --min-samples 4 `
+    --repeats 1 `
+    --distance-backend optimized `
+    --output outputs/benchmarks/moons_demo
+```
 
 ## Experiments
 
