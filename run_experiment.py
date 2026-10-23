@@ -355,4 +355,30 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+
     main()
+
+    # Uncomment the following block to print examples for a specific parameter pair from a previous run.
+    
+    # from pathlib import Path
+    # import pandas as pd
+
+    # from loading_dataset import load_dataset
+
+
+    # train, _, headers, _, _ = load_dataset()
+    # df = pd.DataFrame(train, columns=headers)
+
+    # df_child = df.loc[
+    #     df["module"].astype(str).str.strip().str.casefold() == "child"
+    # ].reset_index(drop=True)
+
+    # run_dir = Path("experiments/2026-10-21/17-52-39-553828")
+
+    # for eps, min_samples in [(0.725, 5), (0.675, 3)]:
+    #     print_parameter_examples(
+    #         run_dir=run_dir,
+    #         df=df_child,  # your original Child experiment DataFrame
+    #         eps=eps,
+    #         min_samples=min_samples,
+    #     )
