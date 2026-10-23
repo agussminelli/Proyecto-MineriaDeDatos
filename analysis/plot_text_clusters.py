@@ -1,22 +1,16 @@
-"""Earlier raw-text/PCA visualization with experiment-specific parameters."""
+"""Reusable text-cluster visualization and an optional exploratory entry point."""
 
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
 import json
-
-from features.loading_dataset import load_dataset
-from features.preprocess import preprocess_dataset
-from features.dense import embed_texts, apply_pca
-from dbscan import DBSCAN
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
@@ -24,46 +18,90 @@ NOISE_COLOR = "#888888"
 OTHER_COLOR = "#BCC5CC"
 
 
+def _prepare_projection(features, labels):
+    """Validate aligned inputs and prepare shared PCA coordinates and colours."""
+    labels = np.asarray(labels)
+    features = np.asarray(features, dtype=np.float64)
+
+    if (
+        features.ndim != 2
+        or min(features.shape) < 2
+        or not np.isfinite(features).all()
+    ):
+        raise ValueError(
+            "Need a finite feature matrix with >=2 rows and columns"
+        )
+
+    if (
+        labels.ndim != 1
+        or len(labels) != len(features)
+        or not np.isfinite(labels).all()
+        or np.any(labels != np.floor(labels))
+        or np.any(labels < -1)
+    ):
+        raise ValueError("Labels must be aligned integers, with -1 for noise")
+
+    labels = labels.astype(int)
+
+    pca = PCA(n_components=2, svd_solver="full")
+    coordinates = pca.fit_transform(features)
+    explained = float(pca.explained_variance_ratio_.sum())
+
+    ids, counts = np.unique(labels[labels >= 0], return_counts=True)
+    ranked = sorted(zip(ids, counts), key=lambda pair: (-pair[1], pair[0]))
+    palette = plt.get_cmap("tab20")
+    colors = {
+        int(cluster): palette(index % 20)
+        for index, (cluster, _) in enumerate(ranked)
+    }
+    return features, labels, coordinates, explained, ranked, colors
+
+
 def plot_dbscan_clusters_2d(X, labels, title, output_path):
+    """Save the original scatter-only layout, with all clusters in its legend.
+
+    Uses the same PCA projection and cluster colours as plot_text_clusters.
+    output_path specifies the figure filename (for example a PNG or SVG).
+    No clustering is fitted. The figure is saved without opening a window.
+    Returns the saved Path. With more than 20 clusters, colours repeat.
     """
-    Project data to 2D with PCA and plot DBSCAN clusters.
-    Noise points (-1) are shown separately.
-    This projection is a visualization, not the clustering space.
-    """
-    pca_2d = PCA(n_components=2)
-    X_2d = pca_2d.fit_transform(X)
+    output_path = Path(output_path)
+    _, labels, coordinates, explained, ranked, colors = _prepare_projection(
+        X, labels
+    )
+    fig, ax = plt.subplots(figsize=(10, 8))
 
-    unique_labels = sorted(set(labels))
+    for cluster, _ in ranked:
+        members = labels == cluster
+        ax.scatter(
+            *coordinates[members].T,
+            s=18,
+            alpha=0.8,
+            color=colors[int(cluster)],
+            label=f"Cluster {cluster}",
+        )
 
-    plt.figure(figsize=(10, 8))
+    if np.any(labels == -1):
+        ax.scatter(
+            *coordinates[labels == -1].T,
+            s=18,
+            alpha=0.5,
+            color=NOISE_COLOR,
+            marker="x",
+            label="Noise",
+        )
 
-    for label in unique_labels:
-        mask = labels == label
-
-        if label == -1:
-            plt.scatter(
-                X_2d[mask, 0],
-                X_2d[mask, 1],
-                s=10,
-                alpha=0.4,
-                label="Noise"
-            )
-        else:
-            plt.scatter(
-                X_2d[mask, 0],
-                X_2d[mask, 1],
-                s=18,
-                alpha=0.8,
-                label=f"Cluster {label}"
-            )
-
-    plt.xlabel("PCA component 1")
-    plt.ylabel("PCA component 2")
-    plt.title(title)
-    plt.legend(markerscale=1.5, fontsize=8)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
-    plt.show()
+    ax.set(
+        xlabel="PCA component 1",
+        ylabel="PCA component 2",
+        title=f"{title}\nPCA view only ({explained:.1%} variance retained)",
+    )
+    ax.legend(markerscale=1.5, fontsize=8)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+    return output_path
 
 
 def plot_text_clusters(
@@ -111,39 +149,12 @@ def plot_text_clusters(
         raise ValueError("max_clusters must be between 1 and 20")
     if not filename or Path(filename).name != filename:
         raise ValueError("filename must be a plain filename stem")
-    features = np.asarray(features, dtype=np.float64)
-
-    if (
-        features.ndim != 2
-        or min(features.shape) < 2
-        or not np.isfinite(features).all()
-    ):
-        raise ValueError("Need a finite feature matrix with >=2 rows and columns")
-
-    if (
-        labels.ndim != 1
-        or len(labels) != len(features)
-        or not np.isfinite(labels).all()
-        or np.any(labels != np.floor(labels))
-        or np.any(labels < -1)
-    ):
-        raise ValueError("Labels must be aligned integers, with -1 for noise")
-
-    labels = labels.astype(int)
-
-    pca = PCA(n_components=2, svd_solver="full")
-    coordinates = pca.fit_transform(features)
-    explained = float(pca.explained_variance_ratio_.sum())
-
-    ids, counts = np.unique(labels[labels >= 0], return_counts=True)
-    ranked = sorted(zip(ids, counts), key=lambda pair: (-pair[1], pair[0]))
+    features, labels, coordinates, explained, ranked, colors = (
+        _prepare_projection(features, labels)
+    )
+    ids = [cluster for cluster, _ in ranked]
     displayed = ranked[:max_clusters]
     remaining = ranked[max_clusters:]
-    palette = plt.get_cmap("tab20")
-    colors = {
-        int(cluster): palette(index)
-        for index, (cluster, _) in enumerate(displayed)
-    }
     noise_count = int(np.sum(labels == -1))
     assigned_count = int(np.sum(labels >= 0))
 
@@ -169,12 +180,16 @@ def plot_text_clusters(
     )
 
     noise = labels == -1
-    scatter_ax.scatter(*coordinates[noise].T, color=NOISE_COLOR, marker="x", s=22, alpha=0.6)
+    scatter_ax.scatter(
+        *coordinates[noise].T, color=NOISE_COLOR, marker="x", s=22, alpha=0.6
+    )
 
     if remaining:
         other_ids = [cluster for cluster, _ in remaining]
         other = np.isin(labels, other_ids)
-        scatter_ax.scatter(*coordinates[other].T, color=OTHER_COLOR, s=15, alpha=0.55)
+        scatter_ax.scatter(
+            *coordinates[other].T, color=OTHER_COLOR, s=15, alpha=0.55
+        )
 
     for cluster, _ in displayed:
         members = labels == cluster
@@ -259,22 +274,27 @@ def plot_text_clusters(
     return paths
 
 
-
 def main():
+    """Run the historical raw-text/PCA exploration with local data."""
+    import pandas as pd
+    from sentence_transformers import SentenceTransformer
+
+    from dbscan import DBSCAN
+    from features.loading_dataset import load_dataset
+    from features.preprocess import preprocess_dataset
+    from features.dense import embed_texts, apply_pca
+
     # Load data
     train, _, train_headers, _, data_dir = load_dataset(apply_grouping=False)
     train_df = pd.DataFrame(train, columns=train_headers)
 
     # Preprocess
-    prep_train_df = preprocess_dataset(train_df,text_cols=["open_response"])
+    prep_train_df = preprocess_dataset(train_df, text_cols=["open_response"])
 
     texts = prep_train_df["open_response"].fillna("").tolist()
 
     # Dense embeddings
-    embedding_model = SentenceTransformer(
-        MODEL_NAME,
-        local_files_only=True
-    )
+    embedding_model = SentenceTransformer(MODEL_NAME, local_files_only=True)
 
     X_dense = embed_texts(texts, embedding_model)
 
@@ -285,7 +305,7 @@ def main():
     eps = 0.625
     min_samples = 8
 
-    model = DBSCAN(eps=eps,min_samples=min_samples)
+    model = DBSCAN(eps=eps, min_samples=min_samples)
     labels = model.fit_predict(X_pca)
 
     n_clusters = len(set(labels) - {-1})
@@ -304,12 +324,7 @@ def main():
         f"clusters={n_clusters}, noise={noise_fraction:.2%}"
     )
 
-    plot_dbscan_clusters_2d(
-        X_pca,
-        labels,
-        title,
-        output_path
-    )
+    plot_dbscan_clusters_2d(X_pca, labels, title, output_path)
 
     print("Plot saved to:", output_path)
 
