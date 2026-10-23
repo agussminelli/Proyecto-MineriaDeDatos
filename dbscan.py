@@ -543,7 +543,7 @@ class DBSCAN:
     
 
 if __name__ == "__main__":
-    from generate_testdata import generate_smiley_data, generate_easy_text
+    from benchmarks.generate_testdata import generate_smiley_data, generate_easy_text
     X_text, texts=generate_easy_text()
 
     # EXAMPLE USAGE

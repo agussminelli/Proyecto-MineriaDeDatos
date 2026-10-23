@@ -4,13 +4,15 @@ This script embeds raw text, applies PCA retaining 90% variance, and explores
 parameters using the historical coverage-weighted silhouette heuristic.
 """
 
+from pathlib import Path
+
 import pandas as pd
 
 from dbscan import DBSCAN
-from loading_dataset import load_dataset
-from preprocess import preprocess_dataset
-from silhouette_dense import evaluate_silhouette
-from vectorization.dense import apply_pca, load_or_embed_texts
+from features.loading_dataset import load_dataset
+from features.preprocess import preprocess_dataset
+from analysis.silhouette_dense import evaluate_silhouette
+from features.dense import apply_pca, load_or_embed_texts
 
 
 VERBOSE = True
@@ -21,7 +23,7 @@ MIN_SAMPLES_VALUES = [2, 3, 4, 5]
 
 def main():
     train, _, train_headers, _, data_dir = load_dataset()
-    output_dir = data_dir / "output"
+    output_dir = Path("outputs/exploration/project")
     train_df = pd.DataFrame(train, columns=train_headers)
 
     # Cleaning is retained for the historical side-by-side inspection.

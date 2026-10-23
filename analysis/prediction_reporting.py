@@ -48,7 +48,7 @@ def evaluate_predictions(vectors, labels):
     # Reuse training's stabilized library DBCV implementation.
     if len(cluster_ids) >= 2 and np.all(sizes >= 2):
         try:
-            from evaluation import dbcv_module, prepare_dbcv_labels
+            from analysis.evaluation import dbcv_module, prepare_dbcv_labels
             from sklearn.metrics import pairwise_distances
 
             distances = pairwise_distances(vectors, metric="euclidean")

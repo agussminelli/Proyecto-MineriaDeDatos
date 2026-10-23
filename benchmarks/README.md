@@ -6,9 +6,9 @@ Run commands from the repository root. This benchmark compares the custom implem
 
 ```bash
 python -m pip install -r benchmarks/requirements.txt
-python benchmarks/benchmark_dbscan.py --correctness-only --output benchmark_results/checks
-python benchmarks/benchmark_dbscan.py --sizes 100 250 500 --repeats 3 --output benchmark_results/blobs
-python benchmarks/plot_results.py benchmark_results/blobs
+python benchmarks/benchmark_dbscan.py --correctness-only --output outputs/benchmarks/checks
+python benchmarks/benchmark_dbscan.py --sizes 100 250 500 --repeats 3 --output outputs/benchmarks/blobs
+python benchmarks/plot_results.py outputs/benchmarks/blobs
 ```
 
 The benchmark supports Windows through the process-memory API and Linux/macOS through `resource` peak-memory measurement. It sets numerical thread counts to one. The core DBSCAN imports only NumPy; matplotlib is loaded only for its plotting method.
@@ -16,8 +16,8 @@ The benchmark supports Windows through the process-memory API and Linux/macOS th
 ## Synthetic examples
 
 ```bash
-python benchmarks/benchmark_dbscan.py --dataset moons --sizes 250 500 1000 --eps .1 .15 .2 --min-samples 4 8 --output benchmark_results/moons
-python benchmarks/benchmark_dbscan.py --dataset smiley --sizes 200 400 790 --eps .08 .12 .16 --min-samples 4 8 --output benchmark_results/smiley
+python benchmarks/benchmark_dbscan.py --dataset moons --sizes 250 500 1000 --eps .1 .15 .2 --min-samples 4 8 --output outputs/benchmarks/moons
+python benchmarks/benchmark_dbscan.py --dataset smiley --sizes 200 400 790 --eps .08 .12 .16 --min-samples 4 8 --output outputs/benchmarks/smiley
 ```
 
 The existing smiley generator has 790 points and a fixed seed of 42. Blobs and moons use `--seed`. Each run constructs one dataset and takes nested subsets using a seeded permutation. Repetitions use the same subsets; they measure timing variation, not sampling stability. Sparse subsets may have more noise at fixed parameters. This is why assignments and noise fractions are recorded. Synthetic generator labels are not used.
@@ -29,8 +29,8 @@ Use an existing `features.npy` produced by `run_experiment.py`. No raw narrative
 Example only: replace the path and parameters with your actual experiment settings. Choose sizes no larger than the available row count.
 
 ```bash
-python benchmarks/benchmark_dbscan.py --features experiments/YOUR_RUN/features.npy --sizes 250 500 1000 --metric cosine --eps .2 .3 .4 --min-samples 5 9 --repeats 3 --output benchmark_results/child
-python benchmarks/plot_results.py benchmark_results/child
+python benchmarks/benchmark_dbscan.py --features experiments/YOUR_RUN/features.npy --sizes 250 500 1000 --metric cosine --eps .2 .3 .4 --min-samples 5 9 --repeats 3 --output outputs/benchmarks/child
+python benchmarks/plot_results.py outputs/benchmarks/child
 ```
 
 A matrix containing multiple modules is not automatically filtered. Supply a matrix containing the intended module if reporting module-specific results. The feature file is validated as finite, numeric and two-dimensional; cosine rejects zero vectors. Each cached matrix is limited to 512 MiB by default, but the process can use more memory. Increase `--max-matrix-mib` only when appropriate. Each worker has a 300-second timeout, adjustable with `--timeout`.

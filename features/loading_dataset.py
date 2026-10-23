@@ -25,12 +25,13 @@ def convert_numeric_columns(headers, rows):
 
 def load_dataset(dataset_dir=None, apply_grouping=True):
     if dataset_dir is None:
-        dataset_dir = Path(__file__).resolve().parent.parent / "verbal_autopsy"
+        repository_root = Path(__file__).resolve().parents[1]
+        dataset_dir = repository_root.parent / "verbal_autopsy"
     else:
         dataset_dir = Path(dataset_dir)
     testdata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.test_blind.csv"
     traindata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.train.csv"
-    mapping_path = dataset_dir / "VA_ConsistentRelabelling.txt" #take care Relabeling.txt was edited
+    mapping_path = dataset_dir / "VA_ConsistentRelabelling_updated.txt"
 
     train_headers, train =  read_csv(traindata_path)   
     test_headers, test = read_csv(testdata_path)

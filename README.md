@@ -19,7 +19,7 @@ named `verbal_autopsy`. The loader expects:
 
 - `cleaned_PHMRC_VAI_redacted_free_text.train.csv`
 - `cleaned_PHMRC_VAI_redacted_free_text.test_blind.csv`
-- `VA_ConsistentRelabelling.txt` (the project's edited grouping file)
+- `VA_ConsistentRelabelling_updated.txt` (the project's edited grouping file)
 
 ```powershell
 py -m pip install -r requirements.txt
@@ -39,15 +39,15 @@ These setup operations require internet access.
 | `dbscan.py` | Custom clustering and nearest-core prediction |
 | `run_experiment.py` | Configured representation and parameter experiments |
 | `conf/config.yaml` | Hydra defaults; these are not the selected Child model |
-| `evaluation.py` | Library metrics and cluster-example export |
-| `compare_coverage.py` | Reselect existing grids without refitting |
+| `analysis/evaluation.py` | Library metrics and cluster-example export |
+| `analysis/compare_coverage.py` | Reselect existing grids without refitting |
 | `predict_child.py` | Apply a saved Child configuration to unseen data |
-| `prediction_reporting.py` | Local inspection and aggregate test metrics |
-| `summary.py` | Tables comparing saved experiments |
+| `analysis/prediction_reporting.py` | Local inspection and aggregate test metrics |
+| `analysis/summary.py` | Tables comparing saved experiments |
 | `benchmarks/` | Correctness checks and computational-cost experiments |
 
-`project.py`, `compare_cleaning_dense.py`, `plot_clusters_dense.py`,
-`inspect_narratives.py` and `silhouette_dense.py` support earlier exploratory
+`analysis/project.py`, `analysis/compare_cleaning_dense.py`, `analysis/plot_clusters_dense.py`,
+`analysis/inspect_narratives.py` and `analysis/silhouette_dense.py` support earlier exploratory
 analyses. They may contain experiment-specific settings; use the entry points
 above for the final workflow. Files remain in their original locations to
 preserve imports.
@@ -65,15 +65,15 @@ py run_experiment.py dataset.module=Child representation=dense `
     selection.min_coverage=0.7
 ```
 
-Results go to timestamped `experiments/` directories. Preserve the resolved
+Results go to timestamped `outputs/experiments/` directories. Preserve the resolved
 configuration, metrics, assignments, features, row alignment and summary.
 Do not rerun completed experiments merely to reorganize the repository.
 
 Compare the original 70% coverage floor with the later 50% sensitivity analysis:
 
 ```powershell
-py compare_coverage.py --root experiments `
-    --thresholds 0.7 0.5 --output coverage_review_final
+py -m analysis.compare_coverage --root outputs/experiments `
+    --thresholds 0.7 0.5 --output outputs/comparisons/coverage_review_final
 ```
 
 The script uses saved metrics and assignments. It maximizes finite DBCV with
@@ -88,10 +88,10 @@ Use the same saved experiment for both configurations:
 $run = "experiments\2026-10-21\17-52-39-553828"
 
 py predict_child.py --run-dir "$run" `
-    --eps 0.725 --min-samples 5 --output predictions_child_primary
+    --eps 0.725 --min-samples 5 --output outputs/predictions/child_primary
 
 py predict_child.py --run-dir "$run" `
-    --eps 0.675 --min-samples 3 --output predictions_child_comparison
+    --eps 0.675 --min-samples 3 --output outputs/predictions/child_comparison
 ```
 
 The script validates saved training data, fits the selected training model once,
@@ -111,7 +111,7 @@ See [the benchmark guide](benchmarks/README.md). A quick correctness check:
 
 ```powershell
 py benchmarks/benchmark_dbscan.py --correctness-only `
-    --distance-backend optimized --output benchmark_results/checks
+    --distance-backend optimized --output outputs/benchmarks/checks
 py benchmarks/test_unseen_prediction.py
 ```
 
@@ -124,3 +124,18 @@ Datasets, narrative exports, embeddings, fitted artifacts and generated
 experiment directories are ignored. Ignore rules do not remove files already
 tracked by Git. Inspect `git status` and `git diff --cached` before committing.
 Only reviewed aggregate results and plots should be selected for publication.
+
+## Package execution and historical outputs
+
+Run analysis scripts as modules from the repository root, for example
+`py -m analysis.compare_coverage --help`. Benchmark scripts support both module
+and direct-file execution. Loading and cleaning live in `features/`.
+
+Existing input folders are not moved automatically. The `$run` example above
+intentionally uses the historical experiment path; update it only if you moved
+those files. New runs and default generated artifacts go under `outputs/`.
+The embedding cache now lives at `outputs/cache/embedding_cache`; a new run may
+recompute embeddings unless the old hashed cache files are copied there.
+
+`run_experiment.py` runs experiments again. To inspect saved examples, import
+its `print_parameter_examples` helper instead of replacing its main entry point.

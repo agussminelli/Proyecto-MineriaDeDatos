@@ -7,11 +7,11 @@ entries below. Doing so runs additional embedding and clustering experiments.
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 
-from loading_dataset import load_dataset
-from vectorization.dense import embed_texts, apply_pca
+from features.loading_dataset import load_dataset
+from features.dense import embed_texts, apply_pca
 from dbscan import DBSCAN
-from silhouette_dense import evaluate_silhouette
-from inspect_narratives import (
+from analysis.silhouette_dense import evaluate_silhouette
+from analysis.inspect_narratives import (
     remove_irrelevant_phrases,
     remove_narrative_introductions
 )

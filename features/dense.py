@@ -141,8 +141,8 @@ if __name__ == "__main__":
     parent_dir = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(parent_dir))
 
-    from loading_dataset import load_dataset
-    ## data_dir = r"C:\Users\Agustina\semestre7\intercambio\Mineria de datos\DatosProyecto
+    from features.loading_dataset import load_dataset
+
     train, _, train_headers, _, data_dir = load_dataset() #if it doesnt automatically refer to the right dir, add dir here
     
     embedding_model = SentenceTransformer(
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         local_files_only=True, #Set to False, for first time downloaded
     )
 
-    output_dir = data_dir / "Output"
+    output_dir = Path("outputs/features/dense")
 
     for prefix, headers, rows in [
         ("train", train_headers, train),

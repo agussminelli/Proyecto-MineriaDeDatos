@@ -71,11 +71,12 @@ def review_run(folder, thresholds):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+
     group = p.add_mutually_exclusive_group(required=True)
     group.add_argument('--root', type=Path, help='Search this experiment directory recursively for metrics.csv')
     group.add_argument('--runs', nargs='+', type=Path, help='Specific experiment folders')
     p.add_argument('--thresholds', nargs='+', type=float, default=[.7, .5])
-    p.add_argument('--output', type=Path, default=Path('coverage_review'))
+    p.add_argument('--output', type=Path, default=Path('outputs/comparisons/coverage_review'))
     a=p.parse_args()
 
     if not all(0 <= t <= 1 for t in a.thresholds): p.error('Thresholds must be between 0 and 1')
@@ -94,6 +95,7 @@ def main():
         except (ValueError, KeyError, OSError) as error:
             errors.append(dict(run_dir=str(folder), error=str(error)))
             print(f'Skipped {folder}: {error}')
+            
     if selected: pd.DataFrame(selected).to_csv(a.output/'selected.csv', index=False)
     if candidates: pd.DataFrame(candidates).to_csv(a.output/'candidates.csv', index=False)
     if errors: pd.DataFrame(errors).to_csv(a.output/'errors.csv', index=False)

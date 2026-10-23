@@ -8,7 +8,11 @@ import time
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dbscan import DBSCAN
-from benchmark_dbscan import correctness, agreement
+
+if __package__:
+    from .benchmark_dbscan import correctness, agreement
+else:
+    from benchmark_dbscan import correctness, agreement
 
 
 def main():
@@ -20,16 +24,20 @@ def main():
         'near_duplicates': np.vstack([np.ones((3, 5)), np.ones((3, 5)) + 1e-12, np.zeros((3, 5))]),
         'threshold': np.array([[0.,0.],[1.,0.],[2.,0.],[np.nextafter(1.,2.),1.]]),
     }
+
     for backend in ('baseline', 'optimized'):
         checks=correctness(backend)
         print(f'{backend}: {len(checks)} sklearn comparisons passed')
+
     count=0
     for name, X in datasets.items():
         base=DBSCAN(.5,2).fit(X,precompute=True)
+
         for block in (1,7,256):
             fast=DBSCAN(.5,2,distance_backend='optimized',block_size=block).fit(X,precompute=True)
             np.testing.assert_allclose(fast.distance_matrix_,base.distance_matrix_,atol=1e-10,rtol=1e-10)
             np.testing.assert_array_equal(np.diag(fast.distance_matrix_),0)
+
             # Includes exact and adjacent floating-point distance thresholds.
             for eps in (.000000000001, .5,1.,np.nextafter(1.,0.),np.nextafter(1.,2.),3.,30.):
                 base.eps=fast.eps=eps
@@ -38,6 +46,7 @@ def main():
                 direct=DBSCAN(eps,2,distance_backend='optimized',block_size=block).fit_predict(X)
                 assert agreement(a,direct)=={'ari':1.,'noise_equal':True},(name,block,eps,'on-demand')
                 count+=2
+
     X=rng.normal(size=(12,3))
     model=DBSCAN(.8,2,distance_backend='optimized').fit(X,precompute=True)
     old=model.distance_matrix_
@@ -47,6 +56,7 @@ def main():
     expected=DBSCAN(.8,2).fit(X*3,precompute=True)
     np.testing.assert_allclose(model.distance_matrix_,expected.distance_matrix_,atol=1e-12)
     print(f'{count} baseline/optimized partition comparisons passed; matrix accuracy and cache invalidation passed.')
+    
     X=rng.normal(size=(1000,384)); X/=np.linalg.norm(X,axis=1,keepdims=True)
     for backend in ('baseline','optimized'):
         times=[]

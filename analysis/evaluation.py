@@ -503,15 +503,16 @@ if __name__ == "__main__":
     import pandas as pd
     from sentence_transformers import SentenceTransformer
     
-    from loading_dataset import load_dataset
-    from preprocess import preprocess_dataset
-    from vectorization.dense import load_or_embed_texts, apply_pca
-    from vectorization.sparse import apply_ngrams_and_vectorization, lsa
+    from features.loading_dataset import load_dataset
+    from features.preprocess import preprocess_dataset
+    from features.dense import load_or_embed_texts, apply_pca
+    from features.sparse import apply_ngrams_and_vectorization, lsa
     from dbscan import DBSCAN
 
 
     train,_, train_headers,_, data_dir= load_dataset()
-    output_dir = data_dir/"output"
+    output_dir = Path("outputs/exploration/evaluation")
+    output_dir.mkdir(parents=True, exist_ok=True)
     train_df=pd.DataFrame(train, columns=train_headers)
 
     prep_train_df = preprocess_dataset(

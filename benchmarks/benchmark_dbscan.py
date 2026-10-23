@@ -39,6 +39,7 @@ def correctness(distance_backend="baseline", block_size=256):
     blobs = make_blobs(n_samples=120, centers=[[-3, -3], [3, 3]],
                        cluster_std=.2, random_state=42)[0]
     moons = make_moons(n_samples=150, noise=.02, random_state=42)[0]
+
     cases = [
         ('blobs', blobs, .65, 4), ('moons', moons, .18, 4),
         ('all_noise', np.array([[0., 0.], [3., 0.], [6., 0.]]), .2, 2),
@@ -50,6 +51,7 @@ def correctness(distance_backend="baseline", block_size=256):
         ('self_counts', np.array([[0., 0.], [3., 0.]]), .1, 1),
         ('inclusive_eps', np.array([[0., 0.], [1., 0.], [2., 0.]]), 1., 2),
     ]
+
     rows = []
     for name, X, eps, minimum in cases:
         for metric, p in [('euclidean', 2), ('manhattan', 1), ('minkowski', 3)]:
@@ -58,13 +60,17 @@ def correctness(distance_backend="baseline", block_size=256):
                 actual = DBSCAN(eps, minimum, metric, p, distance_backend, block_size).fit_predict(X, precompute=cached)
                 result = agreement(actual, expected)
                 rows.append(dict(case=name, metric=metric, cached=cached, **result))
+
     rng = np.random.default_rng(42)
+
     X = np.vstack([rng.normal([1, 0, 0], .03, size=(30, 3)),
                    rng.normal([0, 1, 0], .03, size=(30, 3)), [[0, 0, 1]]])
+    
     for cached in (False, True):
         actual = DBSCAN(.02, 4, 'cosine', distance_backend=distance_backend).fit_predict(X, precompute=cached)
         rows.append(dict(case='cosine_directions', metric='cosine', cached=cached,
                          **agreement(actual, reference(X, .02, 4, 'cosine', 2))))
+        
     # Independent expectations prevent shared agreement from hiding trivial errors.
     border = DBSCAN(.11, 3, distance_backend=distance_backend).fit_predict(cases[5][1])
     if not np.all(border == border[0]) or border[0] == -1:
@@ -119,12 +125,14 @@ def worker(spec):
     X = np.load(spec['features'], allow_pickle=False)
     indices = np.load(spec['indices'], allow_pickle=False)
     X = np.ascontiguousarray(X[indices], dtype=np.float64)
+
     # Dataset loading, imports and metrics are outside the timer.
     baseline_peak = peak_process_memory_bytes()
     started = perf_counter()
     assignments = []
     model = None
     matrix_seconds = 0.0
+
     for eps, minimum in spec['grid']:
         if spec['variant'] == 'sklearn_brute':
             labels = reference(X, eps, minimum, spec['metric'], spec['p'])
@@ -138,8 +146,10 @@ def worker(spec):
                 model.eps, model.min_samples = eps, minimum
                 labels = model.fit_predict()
         assignments.append(labels)
+
     elapsed = perf_counter() - started
     peak = peak_process_memory_bytes()
+    
     # Keep all assignments in each variant for equal output retention costs.
     return dict(seconds=elapsed, process_peak_rss_bytes=peak,
                 before_fit_peak_rss_bytes=baseline_peak,
@@ -158,6 +168,7 @@ def write_csv(path, rows):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--features', type=Path, help='Saved, numeric 2D features.npy; no embedding generation')
     parser.add_argument('--dataset', choices=['blobs', 'moons', 'smiley'], default='blobs')
@@ -173,44 +184,54 @@ def main():
     parser.add_argument('--timeout', type=float, default=300.)
     parser.add_argument('--max-matrix-mib', type=float, default=512., help='Fail before allocating a larger cached matrix')
     parser.add_argument('--correctness-only', action='store_true')
-    parser.add_argument('--output', type=Path, default=Path('benchmark_results'))
+    parser.add_argument('--output', type=Path, default=Path('outputs/benchmarks/dbscan'))
+
     args = parser.parse_args()
+
     if args.worker:
         print(json.dumps(worker(json.load(sys.stdin))))
         return
+    
     if args.repeats < 1 or min(args.sizes) < 2:
         parser.error('Use positive repeats and sizes >= 2')
     if min(args.eps) <= 0 or min(args.min_samples) < 1:
         parser.error('eps must be positive and min-samples >= 1')
     if args.output.exists() and any(args.output.iterdir()):
         parser.error("Output directory is not empty; choose a new name to preserve previous results")
+
     args.output.mkdir(parents=True, exist_ok=True)
+
     checks = correctness(args.distance_backend, args.block_size)
     write_csv(args.output / 'correctness.csv', checks)
     print(f'Passed {len(checks)} reference comparisons plus independent border assertion.', flush=True)
+
     if args.correctness_only:
         return
     if args.features:
         X = np.load(args.features, allow_pickle=False)
     elif args.dataset == 'smiley':
-        from generate_testdata import generate_smiley_data
+        from benchmarks.generate_testdata import generate_smiley_data
         X = generate_smiley_data()
     elif args.dataset == 'moons':
         X = make_moons(n_samples=max(args.sizes), noise=.03, random_state=args.seed)[0]
     else:
         X = make_blobs(n_samples=max(args.sizes), centers=4, n_features=2,
                        cluster_std=.35, random_state=args.seed)[0]
+        
     X = np.asarray(X, dtype=np.float64)
     if X.ndim != 2 or not np.isfinite(X).all() or not all(X.shape):
         parser.error('Features must be a nonempty finite numeric 2D array')
     if args.metric == 'cosine' and np.any(np.linalg.norm(X, axis=1) == 0):
         parser.error('Cosine input contains zero vectors')
+
     sizes = sorted(set(args.sizes))
     if max(sizes) > len(X):
         parser.error(f'Largest sample size exceeds available {len(X)} rows')
     if 8 * max(sizes)**2 > args.max_matrix_mib * 1024**2:
         parser.error('Cached matrix exceeds --max-matrix-mib; reduce sizes or explicitly increase budget')
+
     grid = [(float(e), int(m)) for e in args.eps for m in args.min_samples]
+
     metadata = dict(arguments={k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
                     python=sys.version, platform=platform.platform(), numpy=np.__version__,
                     sklearn=sklearn.__version__, shape=list(X.shape),
@@ -218,14 +239,19 @@ def main():
                     threads=1, memory='Process high-water RSS including imports and input; not isolated fit allocation',
                     sampling='Nested seeded subsets; fixed across repetitions; not stratified',
                     dbscan_sha256=hashlib.sha256((Path(__file__).resolve().parents[1] / 'dbscan.py').read_bytes()).hexdigest())
+    
     (args.output / 'metadata.json').write_text(json.dumps(metadata, indent=2))
+
     rows, comparisons, failures = [], [], []
+
     rng = np.random.default_rng(args.seed)
     order = rng.permutation(len(X))
+
     with tempfile.TemporaryDirectory() as temp:
         features = Path(temp) / 'features.npy'
         indices = Path(temp) / 'indices.npy'
         np.save(features, X)
+
         for n in sizes:
             np.save(indices, order[:n])
             for scenario, current_grid in [('single_fit', grid[:1]), ('parameter_sweep', grid)]:
@@ -236,6 +262,7 @@ def main():
                                     metric=args.metric, p=args.p, variant=str(variant),
                                     distance_backend=args.distance_backend, block_size=args.block_size)
                         print(f'Starting n={n}, {scenario}, repetition {repeat+1}/{args.repeats}: {variant}', flush=True)
+
                         try:
                             proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker'],
                                                   input=json.dumps(spec), text=True, capture_output=True,
@@ -247,23 +274,29 @@ def main():
                             write_csv(args.output / 'failures.csv', failures)
                             print(f'  Failed: {variant}; recorded in failures.csv, continuing.', flush=True)
                             continue
+
                         result = json.loads(proc.stdout)
                         outputs[variant] = [np.asarray(a) for a in result.pop('assignments')]
                         rows.append(dict(n=n, dimensions=X.shape[1], scenario=scenario, repeat=repeat,
                                          variant=variant, distance_backend=args.distance_backend, configurations=len(current_grid), **result))
                         write_csv(args.output / 'timings.csv', rows)
+
                     for variant in VARIANTS[:2]:
                         if variant not in outputs or 'sklearn_brute' not in outputs:
                             continue
+
                         for i, (actual, expected) in enumerate(zip(outputs[variant], outputs['sklearn_brute'])):
                             a = agreement(actual, expected)
                             comparisons.append(dict(n=n, scenario=scenario, repeat=repeat, variant=variant,
                                                     eps=current_grid[i][0], min_samples=current_grid[i][1],
                                                     n_clusters=len(set(actual) - {-1}),
                                                     noise_fraction=float(np.mean(actual == -1)), **a))
+                            
                     if comparisons:
                         write_csv(args.output / 'agreement.csv', comparisons)
+
                     print(f'Finished n={n}, {scenario}, repetition {repeat+1}/{args.repeats}; {len(outputs)}/3 successful', flush=True)
+
     summaries = []
     for n in sizes:
         for scenario in ('single_fit', 'parameter_sweep'):
@@ -271,12 +304,15 @@ def main():
                 subset = [r for r in rows if r['n'] == n and r['scenario'] == scenario and r['variant'] == variant]
                 if not subset:
                     continue
+
                 summaries.append(dict(n=n, scenario=scenario, variant=variant, completed_repeats=len(subset),
                     median_seconds=float(np.median([r['seconds'] for r in subset])),
                     min_seconds=min(r['seconds'] for r in subset), max_seconds=max(r['seconds'] for r in subset),
                     median_process_peak_rss_mib=float(np.median([r['process_peak_rss_bytes'] for r in subset]))/1024**2))
+                
     if summaries:
         write_csv(args.output / 'summary.csv', summaries)
+
     mismatches = sum(r['ari'] != 1.0 or not r['noise_equal'] for r in comparisons)
     print(f'Done. {len(failures)} failed measurements. {mismatches} benchmark partition mismatches; inspect agreement.csv before interpreting performance.')
 

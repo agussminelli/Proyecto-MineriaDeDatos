@@ -132,7 +132,23 @@ def create_comparison_table(runs, min_coverage=0.70):
 
 if __name__ == "__main__":
     
-    root = Path("experiments/2026-10-21")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Summarize the historical October 21 experiment set."
+    )
+    parser.add_argument(
+        "--root", type=Path,
+        default=Path("outputs/experiments/2026-10-21"),
+        help="Use experiments/2026-10-21 for unmoved historical results.",
+    )
+    parser.add_argument(
+        "--output", type=Path,
+        default=Path("outputs/comparisons/experiment_summary"),
+    )
+    args = parser.parse_args()
+    root = args.root
+    args.output.mkdir(parents=True, exist_ok=True)
 
     runs = {
         "Dense noPrep, noPCA": root / "08-41-34-152913", 
@@ -148,7 +164,7 @@ if __name__ == "__main__":
 
     comparison = create_comparison_table(runs)
 
-    comparison.to_csv("experiment_comparison.csv", index=False)
+    comparison.to_csv(args.output / "experiment_comparison.csv", index=False)
 
     print(comparison.round({
         "Coverage (%)": 1,
@@ -160,6 +176,6 @@ if __name__ == "__main__":
 
     costs = create_cost_table(runs, min_coverage=0.70)
 
-    costs.to_csv("experiment_costs.csv", index=False)
+    costs.to_csv(args.output / "experiment_costs.csv", index=False)
 
     print(costs.round(3).to_string(index=False))

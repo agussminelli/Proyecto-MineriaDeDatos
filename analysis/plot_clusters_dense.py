@@ -1,14 +1,16 @@
 """Earlier raw-text/PCA visualization with experiment-specific parameters."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
 
-from loading_dataset import load_dataset
-from preprocess import preprocess_dataset
-from vectorization.dense import embed_texts, apply_pca
+from features.loading_dataset import load_dataset
+from features.preprocess import preprocess_dataset
+from features.dense import embed_texts, apply_pca
 from dbscan import DBSCAN
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -91,7 +93,7 @@ def main():
     print(f"Noise fraction: {noise_fraction:.2%}")
 
     filename = f"dbscan_dense_eps{eps}_min{min_samples}.png"
-    output_path = data_dir / "output" / filename
+    output_path = Path("outputs/figures") / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     title = (

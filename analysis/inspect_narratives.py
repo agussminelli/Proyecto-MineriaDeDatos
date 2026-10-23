@@ -2,7 +2,7 @@
 import pandas as pd
 import re
 
-from loading_dataset import load_dataset
+from features.loading_dataset import load_dataset
 
 def remove_irrelevant_phrases(texts):
     """Remove repetitive administrative phrases from narratives."""

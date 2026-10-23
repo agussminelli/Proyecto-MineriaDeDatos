@@ -16,11 +16,11 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.preprocessing import normalize
 
 from dbscan import DBSCAN
-from evaluation import evaluate_parameters, save_cluster_examples
-from loading_dataset import load_dataset
-from preprocess import preprocess_dataset
-from vectorization.dense import load_or_embed_texts
-from vectorization.sparse import apply_ngrams_and_vectorization
+from analysis.evaluation import evaluate_parameters, save_cluster_examples
+from features.loading_dataset import load_dataset
+from features.preprocess import preprocess_dataset
+from features.dense import load_or_embed_texts
+from features.sparse import apply_ngrams_and_vectorization
 
 
 def fingerprint(value):
@@ -232,7 +232,7 @@ def main(cfg: DictConfig):
         )
         preprocess_seconds = perf_counter() - preprocess_started
 
-    cache_dir = Path(data_dir) / "output" / "embedding_cache"
+    cache_dir = Path("outputs/cache/embedding_cache")
 
     vectorization_started = perf_counter()
     X, transformers, details = build_representation(
@@ -472,27 +472,4 @@ def print_parameter_examples(
 
 
 if __name__ == "__main__":
-
-    #main()
-    from pathlib import Path
-    import pandas as pd
-
-    from loading_dataset import load_dataset
-
-
-    train, _, headers, _, _ = load_dataset()
-    df = pd.DataFrame(train, columns=headers)
-
-    df_child = df.loc[
-        df["module"].astype(str).str.strip().str.casefold() == "child"
-    ].reset_index(drop=True)
-
-    run_dir = Path("experiments/2026-10-21/17-52-39-553828")
-
-    for eps, min_samples in [(0.725, 5), (0.675, 3)]:
-        print_parameter_examples(
-            run_dir=run_dir,
-            df=df_child,  # your original Child experiment DataFrame
-            eps=eps,
-            min_samples=min_samples,
-        )
+    main()

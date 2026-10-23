@@ -15,9 +15,9 @@ import pandas as pd
 from omegaconf import OmegaConf
 
 from dbscan import DBSCAN
-from loading_dataset import load_dataset
-from prediction_reporting import evaluate_predictions, write_inspection
-from preprocess import preprocess_dataset
+from features.loading_dataset import load_dataset
+from analysis.prediction_reporting import evaluate_predictions, write_inspection
+from features.preprocess import preprocess_dataset
 
 
 def fingerprint(value):
@@ -52,10 +52,19 @@ def parse_arguments():
     parser.add_argument("--min-samples", type=int, default=5)
 
     parser.add_argument("--input",type=Path,help="Optional CSV. Otherwise use the blind test split.",)
-    parser.add_argument("--output",type=Path,default=Path("predictions_child"),)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Default: outputs/predictions/child_eps_MIN_SAMPLES",
+    )
     parser.add_argument("--examples-per-cluster",type=int,default=5,help="Use 0 to export all unseen narratives.",)
 
     args = parser.parse_args()
+
+    if args.output is None:
+        name = f"child_{args.eps:g}_{args.min_samples}"
+        args.output = Path("outputs/predictions") / name
+
 
     if not np.isfinite(args.eps) or args.eps <= 0:
         parser.error("eps must be finite and positive")

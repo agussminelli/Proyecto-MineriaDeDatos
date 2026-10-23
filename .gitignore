@@ -2,10 +2,7 @@
 LocalData/
 *.npy
 *.pyc
-experiments/
-coverage_review_50/
-predictions/
-benchmark_results/
+outputs/
 
 # Python environments and caches
 __pycache__/
@@ -25,3 +22,8 @@ examples.json
 
 # Locally placed datasets
 verbal_autopsy/
+
+# Preserve protection for historical output directories.
+experiments/
+benchmark_results/
+predictions/

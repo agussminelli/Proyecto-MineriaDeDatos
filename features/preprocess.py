@@ -7,7 +7,7 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 import ssl
 
-from loading_dataset import load_dataset
+from features.loading_dataset import load_dataset
 
 
 # Solve  SSL-certificate problems (usual for Mac )

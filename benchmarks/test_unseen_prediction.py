@@ -1,5 +1,8 @@
 """Test the explicit nearest-core extension to custom DBSCAN."""
-import benchmark_dbscan as bench
+if __package__:
+    from . import benchmark_dbscan as bench
+else:
+    import benchmark_dbscan as bench
 import numpy as np
 from sklearn.datasets import make_blobs
 from sklearn.cluster import DBSCAN as SKDBSCAN
