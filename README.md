@@ -48,7 +48,7 @@ These setup operations require internet access.
 | `analysis/summary.py` | Tables comparing saved experiments |
 | `benchmarks/` | Correctness checks and computational-cost experiments |
 
-`analysis/project.py`, `analysis/compare_cleaning_dense.py`, `analysis/plot_clusters_dense.py`,
+`analysis/project.py`, `analysis/compare_cleaning_dense.py`, `analysis/plot_text_clusters.py`,
 `analysis/inspect_narratives.py` and `analysis/silhouette_dense.py` support earlier exploratory
 analyses. They may contain experiment-specific settings; use the entry points
 above for the final workflow. Files remain in their original locations to
