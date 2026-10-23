@@ -4,9 +4,15 @@ import numpy as np
 
 
 class DBSCAN:
-    def __init__(self, eps=0.5, min_samples=5,
-                 metric="euclidean", p=2, distance_backend="baseline",
-                 block_size=256):
+    def __init__(
+        self,
+        eps=0.5,
+        min_samples=5,
+        metric="euclidean",
+        p=2,
+        distance_backend="baseline",
+        block_size=256,
+    ):
         if eps <= 0:
             raise ValueError("eps must be positive")
         if not isinstance(min_samples, int) or min_samples < 1:
@@ -33,7 +39,9 @@ class DBSCAN:
         # Recheck numerically borderline neighbours using direct subtraction.
         # This also applies when a cached matrix is reused with a different eps.
         if self.distance_backend == "optimized" and self.metric == "euclidean":
-            bound = self._roundoff_factor_ * (self._squared_norms_[i] + self._squared_norms_)
+            bound = self._roundoff_factor_ * (
+                self._squared_norms_[i] + self._squared_norms_
+            )
             near = np.flatnonzero(np.abs(distances**2 - self.eps**2) <= bound)
             if len(near):
                 distances = distances.copy()
@@ -52,7 +60,10 @@ class DBSCAN:
             n = len(self.X_)
             D = np.empty((n, n), dtype=float)
 
-            if self.distance_backend == "optimized" and self.metric == "euclidean":
+            if (
+                self.distance_backend == "optimized"
+                and self.metric == "euclidean"
+            ):
                 for start in range(0, n, self.block_size):
                     stop = min(start + self.block_size, n)
                     D[start:stop] = self._euclidean_block(start, stop)
@@ -69,23 +80,28 @@ class DBSCAN:
         point = self.X_[i]
 
         if self.metric == "cosine":
-            norms = (self._cosine_norms_ if self.distance_backend == "optimized"
-                     else np.linalg.norm(self.X_, axis=1))
-            similarities= (self.X_@point)/(norms*norms[i])
+            norms = (
+                self._cosine_norms_
+                if self.distance_backend == "optimized"
+                else np.linalg.norm(self.X_, axis=1)
+            )
+            similarities = (self.X_ @ point) / (norms * norms[i])
 
             distances = 1.0 - np.clip(similarities, -1.0, 1.0)
         else:
             differences = np.abs(self.X_ - point)
 
-            if self.metric =="euclidean":
+            if self.metric == "euclidean":
                 distances = np.sqrt(np.sum(differences**2, axis=1))
             elif self.metric == "manhattan":
                 distances = np.sum(differences, axis=1)
             elif self.metric == "minkowski":
-                distances = np.sum(differences**self.p, axis=1)**(1.0/self.p)
+                distances = np.sum(differences**self.p, axis=1) ** (
+                    1.0 / self.p
+                )
             else:
                 raise ValueError(f"Unsupported metric: {self.metric}")
-        distances[i]=0.0
+        distances[i] = 0.0
         return distances
 
     def _euclidean_block(self, start, stop):
@@ -100,7 +116,9 @@ class DBSCAN:
         squared += self._squared_norms_[start:stop, None]
         squared += self._squared_norms_[None, :]
         for row, i in enumerate(range(start, stop)):
-            bound = self._roundoff_factor_ * (self._squared_norms_[i] + self._squared_norms_)
+            bound = self._roundoff_factor_ * (
+                self._squared_norms_[i] + self._squared_norms_
+            )
             suspect = np.flatnonzero(squared[row] <= bound)
             if len(suspect):
                 delta = self.X_[suspect] - self.X_[i]
@@ -114,7 +132,10 @@ class DBSCAN:
         """Validate distance settings and clear an incompatible cache."""
         if self.distance_backend not in {"baseline", "optimized"}:
             raise ValueError("distance_backend must be baseline or optimized")
-        if not isinstance(self.block_size, (int, np.integer)) or self.block_size < 1:
+        if (
+            not isinstance(self.block_size, (int, np.integer))
+            or self.block_size < 1
+        ):
             raise ValueError("block_size must be a positive integer")
         allowed = {"euclidean", "manhattan", "cosine", "minkowski"}
 
@@ -148,7 +169,9 @@ class DBSCAN:
                 # data with a large shared offset. Reset on every fit(new_X).
                 self._euclidean_X_ = self.X_ - self.X_[0]
                 self._squared_norms_ = np.sum(self._euclidean_X_**2, axis=1)
-                self._roundoff_factor_ = 64 * np.finfo(float).eps * self.X_.shape[1]
+                self._roundoff_factor_ = (
+                    64 * np.finfo(float).eps * self.X_.shape[1]
+                )
 
         config = (
             self.distance_backend,
@@ -182,7 +205,6 @@ class DBSCAN:
                 self.core_sample_mask_[i] = True
                 self._expand_cluster(i, neighbors, cluster_id)
 
-
     def _expand_cluster(self, i, neighbors, cluster_id):
         self.labels_[i] = cluster_id
 
@@ -211,7 +233,6 @@ class DBSCAN:
                         queue.append(neighbor)
                         queued.add(neighbor)
 
-        
     def fit(self, X=None, precompute=False):
         """Cluster new or previously stored data.
 
@@ -278,7 +299,7 @@ class DBSCAN:
         """
         if not hasattr(self, "labels_"):
             raise ValueError("Call fit before predict")
-        
+
         new = np.asarray(X, dtype=float)
         if new.ndim == 1:
             new = new.reshape(1, -1)
@@ -294,7 +315,7 @@ class DBSCAN:
         if not len(core_idx):
             self.nearest_core_indices_ = nearest
             return result
-        
+
         cores = self.X_[core_idx]
 
         for row, point in enumerate(new):
@@ -304,15 +325,21 @@ class DBSCAN:
             elif self.metric == "manhattan":
                 distances = np.sum(delta, axis=1)
             elif self.metric == "minkowski":
-                distances = np.sum(delta**self.p, axis=1)**(1.0/self.p)
+                distances = np.sum(delta**self.p, axis=1) ** (1.0 / self.p)
             else:
                 point_norm = np.linalg.norm(point)
                 if point_norm == 0:
-                    raise ValueError("Cosine distance is undefined for zero vectors")
-                core_norms = (self._cosine_norms_[core_idx]
-                              if self.distance_backend == "optimized"
-                              else np.linalg.norm(cores, axis=1))
-                distances = 1.0 - np.clip((cores @ point)/(core_norms*point_norm), -1., 1.)
+                    raise ValueError(
+                        "Cosine distance is undefined for zero vectors"
+                    )
+                core_norms = (
+                    self._cosine_norms_[core_idx]
+                    if self.distance_backend == "optimized"
+                    else np.linalg.norm(cores, axis=1)
+                )
+                distances = 1.0 - np.clip(
+                    (cores @ point) / (core_norms * point_norm), -1.0, 1.0
+                )
 
             best = int(np.argmin(distances))
             if distances[best] <= self.eps:
@@ -330,22 +357,26 @@ class DBSCAN:
         contains the training row index, cluster label, metric distance, and
         matching text. The order is stable for equal distances.
         """
-        if not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 1:
+        if (
+            not isinstance(n, (int, np.integer))
+            or isinstance(n, bool)
+            or n < 1
+        ):
             raise ValueError("n must be a positive integer")
         if len(texts) != len(self.X_):
             raise ValueError("texts must match the fitted training row order")
-        
+
         point = np.asarray(X, dtype=float)
 
         if point.ndim == 2 and point.shape[0] == 1:
             point = point[0]
         if point.ndim != 1:
             raise ValueError("X must be one feature vector")
-        
+
         label = int(self.predict(point)[0])
         if label == -1:
             return []
-        
+
         indices = np.flatnonzero(self.labels_ == label)
         candidates = self.X_[indices]
         delta = np.abs(candidates - point)
@@ -355,21 +386,33 @@ class DBSCAN:
         elif self.metric == "manhattan":
             distances = np.sum(delta, axis=1)
         elif self.metric == "minkowski":
-            distances = np.sum(delta**self.p, axis=1)**(1.0/self.p)
+            distances = np.sum(delta**self.p, axis=1) ** (1.0 / self.p)
         else:
             point_norm = np.linalg.norm(point)
             if point_norm == 0:
-                raise ValueError("Cosine distance is undefined for zero vectors")
-            norms = (self._cosine_norms_[indices]
-                     if self.distance_backend == "optimized"
-                     else np.linalg.norm(candidates, axis=1))
-            distances = 1.0 - np.clip((candidates @ point)/(norms*point_norm), -1., 1.)
+                raise ValueError(
+                    "Cosine distance is undefined for zero vectors"
+                )
+            norms = (
+                self._cosine_norms_[indices]
+                if self.distance_backend == "optimized"
+                else np.linalg.norm(candidates, axis=1)
+            )
+            distances = 1.0 - np.clip(
+                (candidates @ point) / (norms * point_norm), -1.0, 1.0
+            )
 
         order = np.lexsort((indices, distances))[:n]
 
-        return [dict(index=int(indices[j]), cluster=label,
-                     distance=float(distances[j]), text=str(texts[indices[j]]))
-                for j in order]
+        return [
+            dict(
+                index=int(indices[j]),
+                cluster=label,
+                distance=float(distances[j]),
+                text=str(texts[indices[j]]),
+            )
+            for j in order
+        ]
 
     def fit_predict(self, X=None, precompute=False):
         """Fit and return a copy of the cluster assignments."""
@@ -404,11 +447,10 @@ class DBSCAN:
                 raise ValueError("All eps values must be finite and positive")
 
         for value in min_samples_values:
-            if (
-                not isinstance(value, (int, np.integer))
-                or value < 1
-            ):
-                raise ValueError("min_samples values must be positive integers")
+            if not isinstance(value, (int, np.integer)) or value < 1:
+                raise ValueError(
+                    "min_samples values must be positive integers"
+                )
 
         shape = (len(min_samples_values), len(eps_values))
         cluster_counts = np.zeros(shape, dtype=int)
@@ -416,7 +458,8 @@ class DBSCAN:
         eps_candidates = {}
 
         fig, axes = plt.subplots(
-            1, 3,
+            1,
+            3,
             figsize=(19, 6),
             constrained_layout=True,
         )
@@ -427,7 +470,7 @@ class DBSCAN:
             k = min_samples - 1
             radii = np.sort(np.partition(D, k, axis=1)[:, k])
 
-            line, = ax_distance.plot(
+            (line,) = ax_distance.plot(
                 radii,
                 label=f"min_samples={min_samples}",
             )
@@ -461,8 +504,12 @@ class DBSCAN:
         ax_distance.legend(fontsize=8)
 
         # separate model so experiments preserve current fit.
-        trial = DBSCAN(metric=self.metric, p=self.p,
-                       distance_backend=self.distance_backend, block_size=self.block_size)
+        trial = DBSCAN(
+            metric=self.metric,
+            p=self.p,
+            distance_backend=self.distance_backend,
+            block_size=self.block_size,
+        )
         trial.X_ = self.X_
         trial._prepare_distances()
         trial.distance_matrix_ = self.distance_matrix_
@@ -478,14 +525,18 @@ class DBSCAN:
                 if np.any(labels == 0):
                     raise RuntimeError("Some points remain unassigned")
 
-                cluster_counts[row, col] = np.unique(
-                    labels[labels > 0]
-                ).size
+                cluster_counts[row, col] = np.unique(labels[labels > 0]).size
                 noise_fractions[row, col] = np.mean(labels == -1)
 
         # 3. Draw both heatmaps.
         panels = [
-            (ax_clusters, cluster_counts, "Number of clusters", "viridis", False),
+            (
+                ax_clusters,
+                cluster_counts,
+                "Number of clusters",
+                "viridis",
+                False,
+            ),
             (ax_noise, noise_fractions, "Noise fraction", "magma", True),
         ]
 
@@ -522,32 +573,38 @@ class DBSCAN:
                     # Choose contrasting text for the cell colour.
                     rgba = image.cmap(image.norm(value))
                     brightness = (
-                        0.299 * rgba[0]
-                        + 0.587 * rgba[1]
-                        + 0.114 * rgba[2]
+                        0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
                     )
 
                     ax.text(
-                        col, row, label,
+                        col,
+                        row,
+                        label,
                         ha="center",
                         va="center",
                         color="black" if brightness > 0.5 else "white",
                         fontsize=8,
                     )
-        print("Candidate eps values for min_samples:", eps_candidates,min_samples_values)
+        print(
+            "Candidate eps values for min_samples:",
+            eps_candidates,
+            min_samples_values,
+        )
         plt.show()
 
         return cluster_counts, noise_fractions, eps_candidates
 
 
-    
-
 if __name__ == "__main__":
-    from benchmarks.generate_testdata import generate_smiley_data, generate_easy_text
-    X_text, texts=generate_easy_text()
+    from benchmarks.generate_testdata import (
+        generate_smiley_data,
+        generate_easy_text,
+    )
+
+    X_text, texts = generate_easy_text()
 
     # EXAMPLE USAGE
-    model = DBSCAN(eps=0.5,min_samples=3,metric="cosine")
+    model = DBSCAN(eps=0.5, min_samples=3, metric="cosine")
 
     # Store data and build the reusable distance matrix,
     # if you want to examin params.
@@ -559,7 +616,7 @@ if __name__ == "__main__":
     )
 
     # Example setting to investigate
-    model.eps = 0.3 
+    model.eps = 0.3
     model.min_samples = 3
     labels = model.fit_predict()
 

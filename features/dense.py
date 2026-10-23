@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+
 def load_or_embed_texts(
     texts,
     file_path,
@@ -47,6 +48,7 @@ def load_or_embed_texts(
     print(f"Saved embeddings: {file_path}")
     return X
 
+
 def embed_texts(texts, model, batch_size=32):
     """Return normalised vectors in the same order as the input texts."""
     if not texts:
@@ -58,12 +60,13 @@ def embed_texts(texts, model, batch_size=32):
         texts,
         convert_to_numpy=True,
         normalize_embeddings=True,
-        show_progress_bar=True
+        show_progress_bar=True,
     )
 
     print("Embedding matrix shape:", X.shape)
 
     return X
+
 
 def save_embeddings(X, headers, rows, output_dir, prefix):
     """Save embeddings and matching metadata in identical row order."""
@@ -87,10 +90,7 @@ def save_embeddings(X, headers, rows, output_dir, prefix):
 
 def show_similarity(index, X, texts, num_results=5):
 
-    similarities = cosine_similarity(
-        X[index].reshape(1, -1),
-        X
-    )[0]
+    similarities = cosine_similarity(X[index].reshape(1, -1), X)[0]
     # Embeddings are normalised, so dot product = cosine similarity.
     # similarities = X @ X[index]
 
@@ -102,7 +102,7 @@ def show_similarity(index, X, texts, num_results=5):
 
     print(f"{num_results} most similar texts:")
 
-    for i in sorted_indices[1:num_results + 1]:
+    for i in sorted_indices[1 : num_results + 1]:
         print(f"\nSimilarity: {similarities[i]:.4f}")
         print(texts[i])
 
@@ -115,14 +115,10 @@ def apply_pca(X, variance_threshold=0.90):
     X_pca_full = pca.fit_transform(X)
 
     # Calculate cumulative explained variance
-    cumulative_variance = np.cumsum(
-        pca.explained_variance_ratio_
-    )
+    cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
 
     # Find the minimum number of components
-    n_components = (
-        np.argmax(cumulative_variance >= variance_threshold) + 1
-    )
+    n_components = np.argmax(cumulative_variance >= variance_threshold) + 1
 
     # Select the first n principal components
     X_pca = X_pca_full[:, :n_components]
@@ -135,19 +131,21 @@ def apply_pca(X, variance_threshold=0.90):
     return X_pca
 
 
-
 if __name__ == "__main__":
     import sys
+
     parent_dir = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(parent_dir))
 
     from features.loading_dataset import load_dataset
 
-    train, _, train_headers, _, data_dir = load_dataset() #if it doesnt automatically refer to the right dir, add dir here
-    
+    train, _, train_headers, _, data_dir = (
+        load_dataset()
+    )  # if it doesnt automatically refer to the right dir, add dir here
+
     embedding_model = SentenceTransformer(
         MODEL_NAME,
-        local_files_only=True, #Set to False, for first time downloaded
+        local_files_only=True,  # Set to False, for first time downloaded
     )
 
     output_dir = Path("outputs/features/dense")
@@ -157,7 +155,7 @@ if __name__ == "__main__":
     ]:
         text_index = headers.index("open_response")
         texts = [row[text_index] for row in rows]
-                    
+
     # Generate embeddings
     X = embed_texts(texts, embedding_model)
 

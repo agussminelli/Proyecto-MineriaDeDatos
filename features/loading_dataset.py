@@ -2,6 +2,7 @@ import csv
 import re
 from pathlib import Path
 
+
 def read_csv(path):
     with path.open(newline="", encoding="utf-8-sig") as file:
         reader = csv.reader(file)
@@ -9,6 +10,7 @@ def read_csv(path):
         rows = list(reader)
 
     return headers, rows
+
 
 def convert_numeric_columns(headers, rows):
     converters = {
@@ -23,24 +25,25 @@ def convert_numeric_columns(headers, rows):
             value = row[index].strip()
             row[index] = convert(value) if value else None
 
+
 def load_dataset(dataset_dir=None, apply_grouping=True):
     if dataset_dir is None:
         repository_root = Path(__file__).resolve().parents[1]
         dataset_dir = repository_root.parent / "verbal_autopsy"
     else:
         dataset_dir = Path(dataset_dir)
-    testdata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.test_blind.csv"
-    traindata_path = dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.train.csv"
+    testdata_path = (dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.test_blind.csv")
+    traindata_path = (dataset_dir / "cleaned_PHMRC_VAI_redacted_free_text.train.csv")
     mapping_path = dataset_dir / "VA_ConsistentRelabelling_updated.txt"
 
-    train_headers, train =  read_csv(traindata_path)   
+    train_headers, train = read_csv(traindata_path)
     test_headers, test = read_csv(testdata_path)
 
     if apply_grouping:
         train_headers, train = add_broad_labeling_to_ds(
-        train_headers, train, mapping_path
-    )
-        
+            train_headers, train, mapping_path
+        )
+
     convert_numeric_columns(train_headers, train)
     convert_numeric_columns(test_headers, test)
 
@@ -133,7 +136,7 @@ def add_broad_labeling_to_ds(headers, rows, mapping_path):
         )
 
     return new_headers, new_rows
-    
+
 
 if __name__ == "__main__":
     train, test, _, _, _ = load_dataset()

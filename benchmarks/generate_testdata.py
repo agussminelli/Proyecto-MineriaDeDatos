@@ -1,40 +1,44 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def generate_smiley_data(show=False):
+    """Return 790 shuffled two-dimensional points using a fixed seed of 42.
+
+    Includes two eyes, a mouth, an outer circle and background points.
+    When show=True, display the generated dataset; no files are written.
+    """
     rng = np.random.default_rng(42)
 
     # Two compact eyes
-    left_eye = rng.normal(
-        loc=(-0.5, 0.5), scale=0.06, size=(80, 2)
-    )
-    right_eye = rng.normal(
-        loc=(0.5, 0.5), scale=0.06, size=(80, 2)
-    )
+    left_eye = rng.normal(loc=(-0.5, 0.5), scale=0.06, size=(80, 2))
+    right_eye = rng.normal(loc=(0.5, 0.5), scale=0.06, size=(80, 2))
 
     # Curved mouth
     theta = np.linspace(np.pi, 2 * np.pi, 240)
-    mouth = np.column_stack((
-        0.8 * np.cos(theta),
-        0.6 * np.sin(theta),
-    ))
+    mouth = np.column_stack(
+        (
+            0.8 * np.cos(theta),
+            0.6 * np.sin(theta),
+        )
+    )
     mouth += rng.normal(scale=0.02, size=mouth.shape)
 
     # Outer circle
     theta_circle = np.linspace(0, 2 * np.pi, 360, endpoint=False)
 
-    circle = np.column_stack((
-        1.0 * np.cos(theta_circle),
-        1.0 * np.sin(theta_circle),
-    ))
+    circle = np.column_stack(
+        (
+            1.0 * np.cos(theta_circle),
+            1.0 * np.sin(theta_circle),
+        )
+    )
     circle += rng.normal(scale=0.01, size=circle.shape)
 
     # Random background points
     background = rng.uniform(-1.1, 1.1, size=(30, 2))
 
-    X_smiley = np.vstack((
-        left_eye, right_eye, mouth, circle, background
-    ))
+    X_smiley = np.vstack((left_eye, right_eye, mouth, circle, background))
 
     # Shuffle so the algorithm cannot rely on the order of the shapes
     rng.shuffle(X_smiley)
@@ -46,25 +50,29 @@ def generate_smiley_data(show=False):
 
     return X_smiley
 
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+
 def generate_easy_text():
+    """Return a TF-IDF matrix and 13 synthetic texts in matching row order.
+
+    Uses three repeated themes and one unrelated sentence. These are small
+    algorithm-demonstration inputs, not verbal-autopsy evaluation data.
+    """
     texts = [
         "fever cough difficulty breathing",
         "high fever cough difficulty breathing",
         "fever persistent cough breathing difficulty",
         "cough fever severe difficulty breathing",
-
         "diarrhea vomiting dehydration",
         "severe diarrhea vomiting dehydration",
         "diarrhea persistent vomiting dehydration",
         "vomiting diarrhea severe dehydration",
-
         "injury bleeding road accident",
         "severe injury bleeding road accident",
         "road accident injury heavy bleeding",
         "injury bleeding after road accident",
-
         "routine vaccination appointment",
     ]
 
