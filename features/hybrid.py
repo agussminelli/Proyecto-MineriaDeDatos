@@ -1,42 +1,29 @@
+"""Combine dense embeddings and normalized LSA features."""
+
 import numpy as np
-from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import normalize
 
 
 def create_hybrid_embeddings(
-    sparse_tfidf_matrix, dense_embeddings, sparse_dimensions=50
+    dense_embeddings,
+    lsa_embeddings,
+    alpha=0.5,
 ):
-    """Concatenate dense vectors and a fitted SVD reduction of TF-IDF.
+    """Combine aligned dense and normalized LSA representations.
 
-    Parameters
-    ----------
-    sparse_tfidf_matrix : sparse matrix of shape (n_samples, n_terms)
-        Training TF-IDF features.
-    dense_embeddings : ndarray of shape (n_samples, n_dense_features)
-        Dense vectors for exactly the same records in the same row order.
-    sparse_dimensions : int
-        Requested number of SVD components; random_state is fixed at 42.
+    Both inputs must contain the same records in the same row order.
+    LSA rows must already be L2-normalized, as returned by lsa().
 
-    Returns
-    -------
-    ndarray
-        Dense vectors followed by the reduced TF-IDF coordinates.
-
-    Notes
-    -----
-    This exploratory helper neither normalizes nor weights the two blocks,
-    and does not return the fitted SVD. The final hybrid representation in
-    run_experiment.build_representation uses explicit normalization and
-    square-root weights; do not treat the two constructions as equivalent.
+    alpha weights the LSA block; 1 - alpha weights the dense block.
     """
+    if not 0 <= alpha <= 1:
+        raise ValueError("alpha must be between 0 and 1")
 
-    # Reduce the dimensionality of the sparse TF-IDF matrix
-    # TruncatedSVD is used because PCA does not support scipy sparse matrices directly
-    svd_reducer = TruncatedSVD(n_components=sparse_dimensions, random_state=42)
-    reduced_sparse_matrix = svd_reducer.fit_transform(sparse_tfidf_matrix)
+    if len(dense_embeddings) != len(lsa_embeddings):
+        raise ValueError("Dense and LSA row counts must match")
 
-    # Concatenate the dense embeddings with the reduced TF-IDF vectors
-    hybrid_feature_matrix = np.hstack(
-        (dense_embeddings, reduced_sparse_matrix)
-    )
-
-    return hybrid_feature_matrix
+    return np.hstack((
+        np.sqrt(1 - alpha)
+        * normalize(dense_embeddings, norm="l2"),
+        np.sqrt(alpha) * lsa_embeddings,
+    ))

@@ -12,15 +12,15 @@ import pandas as pd
 
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
-from sklearn.decomposition import PCA, TruncatedSVD
-from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
 
 from dbscan import DBSCAN
 from analysis.evaluation import evaluate_parameters, save_cluster_examples
 from features.loading_dataset import load_dataset
 from features.preprocess import preprocess_dataset
 from features.dense import load_or_embed_texts
-from features.sparse import apply_ngrams_and_vectorization
+from features.sparse import lsa
+from features.hybrid import create_hybrid_embeddings
 
 
 def fingerprint(value):
@@ -127,29 +127,14 @@ def build_representation(df, cfg, cache_dir):
         details["embedding_cache_hit"] = cache_hit
 
     if representation in {"lsa", "hybrid"}:
-        tfidf, _, vectorizer = apply_ngrams_and_vectorization(
+        reduced, vectorizer, svd = lsa(
             texts,
             n_min=cfg.tfidf.n_min,
             n_max=cfg.tfidf.n_max,
             min_docs=cfg.tfidf.min_docs,
             max_feat=cfg.tfidf.max_feat,
-        )
-
-        components = int(cfg.lsa.n_components)
-
-        if not 1 <= components < min(tfidf.shape):
-            raise ValueError(
-                "LSA components must be positive and smaller than "
-                "both the number of rows and TF-IDF features"
-            )
-
-        svd = TruncatedSVD(
-            n_components=components,
+            sparse_dimensions=int(cfg.lsa.n_components),
             random_state=cfg.seed,
-        )
-        reduced = normalize(
-            svd.fit_transform(tfidf),
-            norm="l2",
         )
 
         transformers["tfidf"] = vectorizer
@@ -167,15 +152,11 @@ def build_representation(df, cfg, cache_dir):
         X = reduced
 
     else:
-        alpha = float(cfg.hybrid.alpha)
-
-        if not 0 <= alpha <= 1:
-            raise ValueError("Hybrid alpha must be between 0 and 1")
-
-        X = np.hstack((
-            np.sqrt(1 - alpha) * normalize(dense, norm="l2"),
-            np.sqrt(alpha) * reduced,
-        ))
+        X = create_hybrid_embeddings(
+            dense_embeddings=dense,
+            lsa_embeddings=reduced,
+            alpha=float(cfg.hybrid.alpha),
+        )
 
     X = np.asarray(X, dtype=np.float64)
 

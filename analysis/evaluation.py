@@ -521,7 +521,7 @@ if __name__ == "__main__":
         download=False
     )
 
-    tfidf_matrix_train, ngrams_train, _= lsa(
+    X_lsa, vectorizer, svd= lsa(
         prep_train_df["open_response_clean"].fillna(""),
         sparse_dimensions=100,
     )
@@ -532,10 +532,10 @@ if __name__ == "__main__":
         metric="euclidean",
     )
 
-    X = np.asarray(tfidf_matrix_train, dtype=np.float64)
+    X = np.asarray(X_lsa, dtype=np.float64)
 
     ### With Silhouette and DBVC and ARI
-    model.fit(tfidf_matrix_train, precompute=True)
+    model.fit(X_lsa, precompute=True)
 
     # eps_values=[0.3,0.5, 0.7,0.9,1.1]
     # min_samples_values=[3, 4, 5, 6, 7,]

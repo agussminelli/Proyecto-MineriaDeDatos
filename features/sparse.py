@@ -41,60 +41,41 @@ def apply_ngrams_and_vectorization(
 
 
 def lsa(
-    cleaned_text_series,
+    texts,
     n_min=1,
     n_max=2,
     min_docs=5,
     max_feat=1000,
     sparse_dimensions=50,
+    random_state=42,
 ):
-    """Fit TF-IDF, reduce with TruncatedSVD and L2-normalize each row.
-
-    Parameters
-    ----------
-    cleaned_text_series : iterable of str
-        Training texts; cleaning must already have been applied.
-    n_min, n_max : int
-        Inclusive n-gram range for TF-IDF.
-    min_docs : int or float
-        Minimum document count or fraction accepted by TfidfVectorizer.
-    max_feat : int
-        Maximum TF-IDF vocabulary size.
-    sparse_dimensions : int
-        Requested number of SVD components; must suit the fitted matrix.
+    """Fit TF-IDF and SVD, then L2-normalize the reduced vectors.
 
     Returns
     -------
-    X_train_lsa : ndarray
-        Dense, row-normalized training representation.
-    n_grams : ndarray of str
-        Original TF-IDF vocabulary names, not names of SVD components.
+    vectors : ndarray
+        Normalized LSA representation in input row order.
     vectorizer : TfidfVectorizer
-        Fitted TF-IDF transformer.
-
-    Notes
-    -----
-    Uses random_state=42 and prints shape and retained variance. This legacy
-    helper does not return its fitted SVD, so its returned objects alone cannot
-    transform unseen texts into the same space. The final experiment pipeline
-    separately saves both fitted transformers.
+        Fitted vocabulary and TF-IDF transformation.
+    svd : TruncatedSVD
+        Fitted dimensionality reduction for reuse on unseen texts.
     """
-
-    sparse_tfidf_matrix, n_grams, vectorizer = apply_ngrams_and_vectorization(
-        cleaned_text_series,
-        n_min,
-        n_max,
-        min_docs,
-        max_feat,
+    tfidf, _, vectorizer = apply_ngrams_and_vectorization(
+        texts,
+        n_min=n_min,
+        n_max=n_max,
+        min_docs=min_docs,
+        max_feat=max_feat,
     )
 
-    svd_reducer = TruncatedSVD(n_components=sparse_dimensions, random_state=42)
-    X_train_lsa = svd_reducer.fit_transform(sparse_tfidf_matrix)
+    if not 1 <= sparse_dimensions < min(tfidf.shape):
+        raise ValueError(
+            "LSA components must be positive and smaller than "
+            "both the number of rows and TF-IDF features"
+        )
 
-    # Normalise after dimensionality reduction.
-    X_train_lsa = normalize(X_train_lsa, norm="l2")
+    svd = TruncatedSVD(n_components=sparse_dimensions,random_state=random_state,)
 
-    print("LSA shape:", X_train_lsa.shape)
-    print("Retained variance:", svd_reducer.explained_variance_ratio_.sum())
+    vectors = normalize(svd.fit_transform(tfidf),norm="l2",)
 
-    return X_train_lsa, n_grams, vectorizer
+    return vectors, vectorizer, svd
